@@ -21,10 +21,15 @@
 #include "cartographer/common/lua_parameter_dictionary.h"
 #include "cartographer/mapping/proto/scan_matching/real_time_correlative_scan_matcher_options.pb.h"
 
+/*
+ * 虽然名字上大张旗鼓地写着实时关联扫描匹配器，但是里面根本没有相关类的定义，仅仅有参数转换相关的函数
+ */
+
 namespace cartographer {
 namespace mapping {
 namespace scan_matching {
-
+ 
+// 把Lua字典格式转换为proto格式
 proto::RealTimeCorrelativeScanMatcherOptions
 CreateRealTimeCorrelativeScanMatcherOptions(
     common::LuaParameterDictionary* const parameter_dictionary);

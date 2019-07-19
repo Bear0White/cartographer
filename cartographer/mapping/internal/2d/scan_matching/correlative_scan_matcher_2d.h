@@ -25,22 +25,38 @@
 #include "cartographer/mapping/2d/xy_index.h"
 #include "cartographer/sensor/point_cloud.h"
 
+/*
+ * 关联扫描匹配器，这是作为“实时扫描匹配器”和“快速关联扫描匹配器”的基类出现的，里面定义了一些基本操作和数据类型
+ */
+
 namespace cartographer {
 namespace mapping {
 namespace scan_matching {
 
+// 定义数据类型：离散化扫描帧，本体是一个"二维整数向量"的数组
 typedef std::vector<Eigen::Array2i> DiscreteScan2D;
 
 // Describes the search space.
 struct SearchParameters {
   // Linear search window in pixel offsets; bounds are inclusive.
+  // 其实这个东西应该叫做“平移边界”，表示移动窗口在x和y方向的平移量的边界，是一个闭区间。
   struct LinearBounds {
     int min_x;
     int max_x;
     int min_y;
     int max_y;
   };
-
+  // 构造函数，非常重要。
+  // 参数：linear_search_window 单边平移量，单位米
+  // angular_search_window 单边旋转量，单位弧度
+  // point_cloud 点云数据
+  // resolution 栅格地图分辨率，单位米
+  // 注意：所谓的“单边”意味着
+  // 搜索窗口的使用过程：首先给定一个扫描帧，一个栅格地图，一个初始位姿估计（如果没有则默认零）
+  // 首先把扫描帧应用初始位姿估计，直观来说，就是把扫描帧“对准”在栅格地图上
+  // 产生旋转窗口，根据论文公式可以计算出旋转步长，然后根据配置参数“单边旋转量”，产生一个个独立的窗口
+  // 例如，单边旋转量为pi/3，则窗口的范围是-pi/3 ~ pi/3。
+  // 对于每个旋转窗口，再去应用平移窗口，计算分值
   SearchParameters(double linear_search_window, double angular_search_window,
                    const sensor::PointCloud& point_cloud, double resolution);
 
@@ -71,6 +87,10 @@ std::vector<DiscreteScan2D> DiscretizeScans(
     const Eigen::Translation2f& initial_translation);
 
 // A possible solution.
+// 一个候选人，记录了一个具体的旋转和平移窗口。但是它们的表示方法是不同的：旋转窗口由上文的函数GenerateRotatedScans来生成
+// 本质是一个向量，里面记录了应用了各个不同旋转窗口的点云数据，而候选人类中的scan_index成员记录了旋转窗口的index；
+// 平移窗口由成员x_index_offset和y_index_offset来记录
+// 此处再次强调一下：旋转窗口预先都应用到了扫描帧上，然后存入了数组，随用随取，避免重复计算；而平移窗口，随用随算，毕竟平移变换的计算量要小得多。
 struct Candidate2D {
   Candidate2D(const int init_scan_index, const int init_x_index_offset,
               const int init_y_index_offset,

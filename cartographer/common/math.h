@@ -28,6 +28,7 @@ namespace cartographer {
 namespace common {
 
 // Clamps 'value' to be in the range ['min', 'max'].
+// 把某个值截断在[min, max]的闭区间中
 template <typename T>
 T Clamp(const T value, const T min, const T max) {
   if (value > max) {

@@ -116,6 +116,10 @@ PrecomputationGrid2D::PrecomputationGrid2D(
                                           Eigen::Array2i(x + width, y))));
       }
     }
+    // 为什么那么难懂？因为迭代量是x，而x找不到直观的意义
+    /* using x' = x + width -1
+     * for (int x)
+    */
     for (int x = 0; x < limits.num_x_cells - width; ++x) {
       intermediate[x + width - 1 + y * stride] = current_values.GetMaximum();
       current_values.RemoveValue(
@@ -130,7 +134,7 @@ PrecomputationGrid2D::PrecomputationGrid2D(
           1.f - std::abs(grid.GetCorrespondenceCost(Eigen::Array2i(x, y))));
     }
     current_values.CheckIsEmpty();
-  }
+  }                                         
   // For each (x, y), we compute the maximum probability in the width x width
   // region starting at each (x, y) and precompute the resulting bound on the
   // score.

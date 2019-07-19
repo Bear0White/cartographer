@@ -23,6 +23,12 @@
 #include "cartographer/common/port.h"
 #include "glog/logging.h"
 
+/* 
+ * 数值转换表，为了实现从uint16整数空间转换到浮点空间而做的查找表。
+ * 查找表本质就是一个浮点数组，元素下标即整数值，元素内容即对应的浮点值，以此完成快速查找。
+ * 每次创建新的查找表，都会在类内部进行存储，避免重复创建。
+ */
+
 namespace cartographer {
 namespace mapping {
 

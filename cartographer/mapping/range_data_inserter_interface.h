@@ -27,14 +27,18 @@
 namespace cartographer {
 namespace mapping {
 
+// 从lua字典到proto的转换
 proto::RangeDataInserterOptions CreateRangeDataInserterOptions(
     common::LuaParameterDictionary* const parameter_dictionary);
 
+// 扫描数据插入器的接口类
 class RangeDataInserterInterface {
  public:
   virtual ~RangeDataInserterInterface() {}
 
   // Inserts 'range_data' into 'grid'.
+  // 唯一的方法：把某个扫描帧插入到栅格中。
+  // 显然，该操作会改变栅格的状态。
   virtual void Insert(const sensor::RangeData& range_data,
                       GridInterface* grid) const = 0;
 };

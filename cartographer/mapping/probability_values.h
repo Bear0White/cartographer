@@ -24,6 +24,15 @@
 #include "cartographer/common/port.h"
 #include "glog/logging.h"
 
+/*
+ * 此处先声明几个自定义的名词：
+ * 占率：即Probability，表示栅格被占据的概率
+ * 空率：即CorrespondenceCost，表示栅格没有被占据的概率
+ * 占率+空率=1
+ * 占空比：即Odd，占率与空率的比值
+ * 
+ */
+
 namespace cartographer {
 namespace mapping {
 

@@ -26,8 +26,12 @@ namespace scan_matching {
 
 // Computes the cost of translating 'pose' to 'target_translation'.
 // Cost increases with the solution's distance from 'target_translation'.
+// 平移量代价函数类：待优化量是平移量，代价函数是计算平移量和目标平移量之间的差值。
+// 整个结构和occupied_space_cost_function很像，都是自定义一个类，类中重载了()作为代价函数本体，然后有一个函数去调用这个类。
+// 不同的是，这里的函数定义成了类内部的公开静态函数成员。
 class TranslationDeltaCostFunctor2D {
  public:
+  // 创造代价函数，代价函数类的高层调用者，实例化代价函数类，并且规定了变量维度，求解类型等细节。
   static ceres::CostFunction* CreateAutoDiffCostFunction(
       const double scaling_factor, const Eigen::Vector2d& target_translation) {
     return new ceres::AutoDiffCostFunction<TranslationDeltaCostFunctor2D,
@@ -35,7 +39,7 @@ class TranslationDeltaCostFunctor2D {
                                            3 /* pose variables */>(
         new TranslationDeltaCostFunctor2D(scaling_factor, target_translation));
   }
-
+  // 代价函数，仅仅是待优化变量中的平移量与目标平移量的差值而已
   template <typename T>
   bool operator()(const T* const pose, T* residual) const {
     residual[0] = scaling_factor_ * (pose[0] - x_);

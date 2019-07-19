@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+/*
+ * 功能性函数实现部分，无需细读
+ */
+
 #include "cartographer/common/ceres_solver_options.h"
 
 namespace cartographer {
