@@ -38,8 +38,8 @@ proto::CeresScanMatcherOptions2D CreateCeresScanMatcherOptions2D(
     common::LuaParameterDictionary* parameter_dictionary);
 
 // Align scans with an existing map using Ceres.
-// 类：Ceres扫描匹配器的定义
-// 构造函数：由参数来构造
+// 类：Ceres扫描匹配器
+// 构造函数：由配置参数来构造
 // 方法：Match，把某个点云匹配到栅格地图上
 class CeresScanMatcher2D {
  public:
@@ -57,7 +57,7 @@ class CeresScanMatcher2D {
   // 简单来说，函数在匹配的时候，会向期望的位姿平移向量靠拢
   // 参数：initial_pose_estimate，初始位姿估计
   // Carto的文档中提到，ceres非线性优化是快速而准确的，但是受初始值影响巨大，所以一定要确保初始值是可靠的才行
-  // 参数：point_cloud，点云数据
+  // 参数：point_cloud，点云数据，也就是激光扫描帧
   // 参数：grid，二维的栅格地图
   // 参数：pose_estimate，位姿估计，用来传出最后的匹配结果
   // 参数：summary，结果概要，用来传出优化的结果
@@ -67,7 +67,7 @@ class CeresScanMatcher2D {
              transform::Rigid2d* pose_estimate,
              ceres::Solver::Summary* summary) const;
 
- // 私有成员：仅仅有匹配器的参数和Ceres的参数而已，其中后者是前者内容的一部分
+ // 私有成员：仅仅有匹配器的配置参数和Ceres的配置参数而已，其中后者是前者内容的一部分
  private:
   const proto::CeresScanMatcherOptions2D options_;
   ceres::Solver::Options ceres_solver_options_;

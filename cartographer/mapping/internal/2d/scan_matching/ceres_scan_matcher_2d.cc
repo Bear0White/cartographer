@@ -35,7 +35,7 @@ namespace cartographer {
 namespace mapping {
 namespace scan_matching {
 
-// 从lua到proto的转换，没什么好说的
+// 配置参数从lua到proto的转换，没什么好说的
 proto::CeresScanMatcherOptions2D CreateCeresScanMatcherOptions2D(
     common::LuaParameterDictionary* const parameter_dictionary) {
   proto::CeresScanMatcherOptions2D options;
@@ -53,6 +53,7 @@ proto::CeresScanMatcherOptions2D CreateCeresScanMatcherOptions2D(
 
 // 构造函数，由一个proto格式的配置参数来构造
 // 里面仅仅是成员的赋值操作，把相关的配置参数赋值给对应的成员
+// 从中可以看出，ceres求解器配置参数，是整个ceres扫描匹配器参数的一部分
 // 注意此处用到的线性求解器类型是ceres::DENSE_QR
 CeresScanMatcher2D::CeresScanMatcher2D(
     const proto::CeresScanMatcherOptions2D& options)

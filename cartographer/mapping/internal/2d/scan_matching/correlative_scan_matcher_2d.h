@@ -47,31 +47,34 @@ struct SearchParameters {
     int max_y;
   };
   // 构造函数，非常重要。
-  // 参数：linear_search_window 单边平移量，单位米
-  // angular_search_window 单边旋转量，单位弧度
+  // 参数：linear_search_window 单边平移搜索范围，单位米
+  // angular_search_window 单边旋转搜索范围，单位弧度
+  // 实际搜索范围是两倍的单边范围，例如，单边旋转搜索范围为pi/3，则整个搜索的范围是-pi/3 ~ pi/3。
   // point_cloud 点云数据
   // resolution 栅格地图分辨率，单位米
-  // 注意：所谓的“单边”意味着
   // 搜索窗口的使用过程：首先给定一个扫描帧，一个栅格地图，一个初始位姿估计（如果没有则默认零）
   // 首先把扫描帧应用初始位姿估计，直观来说，就是把扫描帧“对准”在栅格地图上
   // 产生旋转窗口，根据论文公式可以计算出旋转步长，然后根据配置参数“单边旋转量”，产生一个个独立的窗口
-  // 例如，单边旋转量为pi/3，则窗口的范围是-pi/3 ~ pi/3。
-  // 对于每个旋转窗口，再去应用平移窗口，计算分值
+  // 对于每个旋转窗口，再去应用平移窗口，并计算分值
   SearchParameters(double linear_search_window, double angular_search_window,
                    const sensor::PointCloud& point_cloud, double resolution);
 
   // For testing.
+  // 此处应该仅仅用于测试，略去。
   SearchParameters(int num_linear_perturbations, int num_angular_perturbations,
                    double angular_perturbation_step_size, double resolution);
 
   // Tightens the search window as much as possible.
+  // 尽量地缩紧搜索窗口
   void ShrinkToFit(const std::vector<DiscreteScan2D>& scans,
                    const CellLimits& cell_limits);
 
+  // 旋转搜索窗格的个数
   int num_angular_perturbations;
   double angular_perturbation_step_size;
   double resolution;
   int num_scans;
+  // 
   std::vector<LinearBounds> linear_bounds;  // Per rotated scans.
 };
 
@@ -87,10 +90,12 @@ std::vector<DiscreteScan2D> DiscretizeScans(
     const Eigen::Translation2f& initial_translation);
 
 // A possible solution.
-// 一个候选人，记录了一个具体的旋转和平移窗口。但是它们的表示方法是不同的：旋转窗口由上文的函数GenerateRotatedScans来生成
-// 本质是一个向量，里面记录了应用了各个不同旋转窗口的点云数据，而候选人类中的scan_index成员记录了旋转窗口的index；
-// 平移窗口由成员x_index_offset和y_index_offset来记录
-// 此处再次强调一下：旋转窗口预先都应用到了扫描帧上，然后存入了数组，随用随取，避免重复计算；而平移窗口，随用随算，毕竟平移变换的计算量要小得多。
+/* 一个候选人，记录了一个具体的旋转和平移量。注意，它内部没有具体的点云数据。
+ * 但是它们的表示方法是不同的：旋转窗口由上文的函数GenerateRotatedScans来生成
+ * 本质是一个向量，里面记录了应用了各个不同旋转窗口的点云数据，而候选人类中的scan_index成员记录了旋转窗口的index；
+ * 平移窗口由成员x_index_offset和y_index_offset来记录
+ * 此处再次强调一下：旋转窗口预先都应用到了扫描帧上，然后存入了数组，随用随取，避免重复计算；而平移窗口，随用随算，毕竟平移变换的计算量要小得多。
+ */
 struct Candidate2D {
   Candidate2D(const int init_scan_index, const int init_x_index_offset,
               const int init_y_index_offset,
@@ -104,13 +109,16 @@ struct Candidate2D {
                     search_parameters.angular_perturbation_step_size) {}
 
   // Index into the rotated scans vector.
+  // 此处重点说明一下：GenerateRotatedScans函数产生了一系列的旋转窗口下的点云数据，这里表示一个旋转量对应于哪个旋转窗口
   int scan_index = 0;
 
   // Linear offset from the initial pose.
+  // 平移偏移量
   int x_index_offset = 0;
   int y_index_offset = 0;
 
   // Pose of this Candidate2D relative to the initial pose.
+  // 下面的x和y和orientation其实都是由上面的scan_index和xy便宜量，结合搜索步长来计算得到的
   double x = 0.;
   double y = 0.;
   double orientation = 0.;

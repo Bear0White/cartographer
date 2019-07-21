@@ -38,8 +38,14 @@ namespace {
 // A collection of values which can be added and later removed, and the maximum
 // of the current values in the collection can be retrieved.
 // All of it in (amortized) O(1).
+/*
+ * 滑动窗口类，这个类仅仅用于产生预计算栅格而已，本体上维护一个队列，可以返回队列最大值
+ * 本体上维护一个(非严格)单调递减队列
+ */
 class SlidingWindowMaximum {
  public:
+  // 向队列尾部添加元素，如果尾部有更小的元素，则把这些元素全部弹出。
+  // 从而保证了添加元素之后队列依然是单调递减的
   void AddValue(const float value) {
     while (!non_ascending_maxima_.empty() &&
            value > non_ascending_maxima_.back()) {
@@ -47,7 +53,8 @@ class SlidingWindowMaximum {
     }
     non_ascending_maxima_.push_back(value);
   }
-
+  // 给定一个值，如果队列头部元素等于这个值，则弹出队列头部元素
+  // 之所以这么设计，是在产生预计算栅格时用的，非常巧妙
   void RemoveValue(const float value) {
     // DCHECK for performance, since this is done for every value in the
     // precomputation grid.
@@ -57,24 +64,26 @@ class SlidingWindowMaximum {
       non_ascending_maxima_.pop_front();
     }
   }
-
+  // 返回队列的最大值，即头部元素
   float GetMaximum() const {
     // DCHECK for performance, since this is done for every value in the
     // precomputation grid.
     DCHECK_GT(non_ascending_maxima_.size(), 0);
     return non_ascending_maxima_.front();
   }
-
+  // 检查队列是否为空？
   void CheckIsEmpty() const { CHECK_EQ(non_ascending_maxima_.size(), 0); }
 
  private:
   // Maximum of the current sliding window at the front. Then the maximum of the
   // remaining window that came after this values first occurrence, and so on.
+  // 队列本体
   std::deque<float> non_ascending_maxima_;
 };
 
 }  // namespace
 
+// 配置参数的格式转换：从Lua到proto
 proto::FastCorrelativeScanMatcherOptions2D
 CreateFastCorrelativeScanMatcherOptions2D(
     common::LuaParameterDictionary* const parameter_dictionary) {
@@ -88,6 +97,10 @@ CreateFastCorrelativeScanMatcherOptions2D(
   return options;
 }
 
+/*
+ * 预计算栅格的构造函数，函数中去产生预计算栅格
+ * 提前预警：这个函数写得非常艰深难懂
+ */
 PrecomputationGrid2D::PrecomputationGrid2D(
     const Grid2D& grid, const CellLimits& limits, const int width,
     std::vector<float>* reusable_intermediate_grid)
@@ -97,6 +110,9 @@ PrecomputationGrid2D::PrecomputationGrid2D(
       min_score_(1.f - grid.GetMaxCorrespondenceCost()),
       max_score_(1.f - grid.GetMinCorrespondenceCost()),
       cells_(wide_limits_.num_x_cells * wide_limits_.num_y_cells) {
+  /*
+   * 此处注意一些参数的初始化：cells_是预计算栅格(以下简称P)的本体，尺寸是原有栅格M尺寸加上width-1
+   */
   CHECK_GE(width, 1);
   CHECK_GE(limits.num_x_cells, 1);
   CHECK_GE(limits.num_y_cells, 1);
@@ -107,8 +123,11 @@ PrecomputationGrid2D::PrecomputationGrid2D(
   intermediate.resize(wide_limits_.num_x_cells * limits.num_y_cells);
   for (int y = 0; y != limits.num_y_cells; ++y) {
     SlidingWindowMaximum current_values;
+    // init Queue
+    
     current_values.AddValue(
         1.f - std::abs(grid.GetCorrespondenceCost(Eigen::Array2i(0, y))));
+    // Q.add(p[0,y])
     for (int x = -width + 1; x != 0; ++x) {
       intermediate[x + width - 1 + y * stride] = current_values.GetMaximum();
       if (x + width < limits.num_x_cells) {
@@ -116,10 +135,10 @@ PrecomputationGrid2D::PrecomputationGrid2D(
                                           Eigen::Array2i(x + width, y))));
       }
     }
-    // 为什么那么难懂？因为迭代量是x，而x找不到直观的意义
-    /* using x' = x + width -1
-     * for (int x)
-    */
+    // for x = [1, w-1]:
+    //   I[x-1,y] = Q.max
+    //   if x < xcells: Q.add(p[x,y])
+
     for (int x = 0; x < limits.num_x_cells - width; ++x) {
       intermediate[x + width - 1 + y * stride] = current_values.GetMaximum();
       current_values.RemoveValue(
@@ -127,12 +146,21 @@ PrecomputationGrid2D::PrecomputationGrid2D(
       current_values.AddValue(1.f - std::abs(grid.GetCorrespondenceCost(
                                         Eigen::Array2i(x + width, y))));
     }
+    // for x = [w, xcells-1]:
+    //    I[x-1, y] = Q.max
+    //    Q.rm(p[x-w, y])
+    //    Q.add(p[x, y])
+
     for (int x = std::max(limits.num_x_cells - width, 0);
          x != limits.num_x_cells; ++x) {
       intermediate[x + width - 1 + y * stride] = current_values.GetMaximum();
       current_values.RemoveValue(
           1.f - std::abs(grid.GetCorrespondenceCost(Eigen::Array2i(x, y))));
     }
+    // for x = [max{xcells, w}, xcells+w-1]:
+    // I[x-1, y] =Q.max
+    // Q.rm(p[x-w],y)
+    
     current_values.CheckIsEmpty();
   }                                         
   // For each (x, y), we compute the maximum probability in the width x width

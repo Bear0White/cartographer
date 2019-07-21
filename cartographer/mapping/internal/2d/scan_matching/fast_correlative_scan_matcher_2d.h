@@ -39,6 +39,7 @@ namespace cartographer {
 namespace mapping {
 namespace scan_matching {
 
+// 配置参数格式转换：从lua到proto
 proto::FastCorrelativeScanMatcherOptions2D
 CreateFastCorrelativeScanMatcherOptions2D(
     common::LuaParameterDictionary* parameter_dictionary);
@@ -46,6 +47,15 @@ CreateFastCorrelativeScanMatcherOptions2D(
 // A precomputed grid that contains in each cell (x0, y0) the maximum
 // probability in the width x width area defined by x0 <= x < x0 + width and
 // y0 <= y < y0.
+/*
+ * 预计算栅格：对于某个栅格M，以w作为宽度，产生预计算栅格P，
+ * 则P(x,y)表示M中以(x,y)作为左上顶点的w*w区域中的最大值
+ * 预警：这个类写得非常差劲
+ * 首先，P的本体实际上是cells_，这是一个一维数组模拟二维栅格，栅格的大小其实是wide_limits_
+ * wide_limits_的值是M的大小加上width-1。就是说M栅格是10*10，宽度是3，则P就是12*12
+ * 但是在查询P(x,y)时会把这个偏移量算上，所以就有了offset_=(-width+1, -width+1)，这个值在GetValue中使用
+ * 为什么要这样做？这个要看构造函数，P就是在构造函数中产生的。
+ */
 class PrecomputationGrid2D {
  public:
   PrecomputationGrid2D(const Grid2D& grid, const CellLimits& limits, int width,
@@ -53,8 +63,10 @@ class PrecomputationGrid2D {
 
   // Returns a value between 0 and 255 to represent probabilities between
   // min_score and max_score.
+  // 查看P(x,y)，注意这里是算上了偏移量的
   int GetValue(const Eigen::Array2i& xy_index) const {
     const Eigen::Array2i local_xy_index = xy_index - offset_;
+    // 下面这段话据说是强制转换无符号数来省去两次比较，因为负数转换为无符号数会很大
     // The static_cast<unsigned> is for performance to check with 2 comparisons
     // xy_index.x() < offset_.x() || xy_index.y() < offset_.y() ||
     // local_xy_index.x() >= wide_limits_.num_x_cells ||
@@ -80,18 +92,25 @@ class PrecomputationGrid2D {
 
   // Offset of the precomputation grid in relation to the 'grid'
   // including the additional 'width' - 1 cells.
+  // 这个offset_在构造函数中初始化为(-width+1, -width+1)，随后不再更改，只在GetValue方法中调用
   const Eigen::Array2i offset_;
 
   // Size of the precomputation grid.
+  // 这个是预计算栅格的大小
   const CellLimits wide_limits_;
 
   const float min_score_;
   const float max_score_;
 
   // Probabilites mapped to 0 to 255.
+  // 预计算栅格的数据本体，用一维数组模拟二维栅格
   std::vector<uint8> cells_;
 };
 
+/*
+ * 预计算栅格栈，内部存储本体是一个数组
+ * 按不同的宽度产生预计算栅格，形成数组，存入其中，可以根据索引返回不同的对象
+ */
 class PrecomputationGridStack2D {
  public:
   PrecomputationGridStack2D(

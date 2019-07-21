@@ -50,6 +50,11 @@ namespace mapping {
 namespace scan_matching {
 
 // An implementation of "Real-Time Correlative Scan Matching" by Olson.
+/* 
+ * 这里虽然说是论文《Real-Time Correlative Scan Matching》的实现，但是这里的算法真的没那么负责，
+ * 简单来说，就是产生一系列的搜索窗口，逐一搜索，计算分数，分数最高的就认为是真正的位姿变换结果。
+ * 这个结果是提供给ceres扫描匹配器做精细匹配的
+ */
 class RealTimeCorrelativeScanMatcher2D {
  public:
   explicit RealTimeCorrelativeScanMatcher2D(
@@ -63,6 +68,10 @@ class RealTimeCorrelativeScanMatcher2D {
   // Aligns 'point_cloud' within the 'grid' given an
   // 'initial_pose_estimate' then updates 'pose_estimate' with the result and
   // returns the score.
+  /*
+   * 最核心的方法：扫描匹配。把一个点云（即扫描帧）匹配到一个栅格地图中去，把匹配得到的位姿变换以参数形式进行传出。
+   * 注意这里有一个初始位姿估计参数，这个参数应该是由IMU等传感器得到的（如果有的话），搜索窗口是在这个初始位姿的基础上进行展开的。
+   */
   double Match(const transform::Rigid2d& initial_pose_estimate,
                const sensor::PointCloud& point_cloud, const Grid2D& grid,
                transform::Rigid2d* pose_estimate) const;

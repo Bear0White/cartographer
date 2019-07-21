@@ -74,7 +74,7 @@ class OccupiedSpaceCostFunction2D {
       // 评估栅格地图在这个位置点上的概率值
       // 此处参考ceres官网，差值对象的Evaluate方法，可以求出给定二维点处的值以及偏导。
       // 此处求出的是给定点的值，存入了残差项内。
-      // 关于坐标转换：此处是比较难理解的，似乎栅格坐标系和实体坐标系转换挺难的，到底是怎么定义的
+      // [关于坐标转换：此处是比较难理解的，似乎栅格坐标系和实体坐标系转换挺难的，到底是怎么定义的???]
       interpolator.Evaluate(
           (limits.max().x() - world[0]) / limits.resolution() - 0.5 +
               static_cast<double>(kPadding),
