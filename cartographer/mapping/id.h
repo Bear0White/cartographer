@@ -37,6 +37,10 @@ namespace cartographer {
 namespace mapping {
 namespace internal {
 
+/*
+ * 以下三个函数分别返回某个对象t的time()函数结果，和time成员
+ * 但是搜遍整个项目，都没找到它们在哪里被调用
+ */
 template <class T>
 auto GetTimeImpl(const T& t, int) -> decltype(t.time()) {
   return t.time();

@@ -22,6 +22,7 @@
 namespace cartographer {
 namespace mapping {
 
+// 参数格式转换：从lua到proto
 proto::MotionFilterOptions CreateMotionFilterOptions(
     common::LuaParameterDictionary* const parameter_dictionary) {
   proto::MotionFilterOptions options;
@@ -34,9 +35,17 @@ proto::MotionFilterOptions CreateMotionFilterOptions(
   return options;
 }
 
+// 构造函数，从参数中构建，仅仅完成了参数的赋值
 MotionFilter::MotionFilter(const proto::MotionFilterOptions& options)
     : options_(options) {}
 
+/*
+ * 判断当前数据是否与前一帧数据过于相似？
+ * 判断指标包括时间戳，位姿中的平移和旋转量的差
+ * 注意只有这些差值同时满足所有条件才返回"相似"判定结果
+ * 如果判别“不相似”，则记录当前数据到last_time和last_pose中去，来作为下一次的判断依据
+ * 整体并不复杂
+ */
 bool MotionFilter::IsSimilar(const common::Time time,
                              const transform::Rigid3d& pose) {
   LOG_IF_EVERY_N(INFO, num_total_ >= 500, 500)
