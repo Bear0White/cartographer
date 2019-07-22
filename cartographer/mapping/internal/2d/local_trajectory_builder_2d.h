@@ -41,6 +41,10 @@ namespace mapping {
 // Wires up the local SLAM stack (i.e. pose extrapolator, scan matching, etc.)
 // without loop closure.
 // TODO(gaschler): Add test for this class similar to the 3D test.
+
+/*
+ * 局部轨迹构建者，是整个前端的最高层调用者
+ */
 class LocalTrajectoryBuilder2D {
  public:
   struct InsertionResult {
