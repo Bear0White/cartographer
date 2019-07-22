@@ -121,6 +121,7 @@ class PrecomputationGridStack2D {
     return precomputation_grids_[index];
   }
 
+  // 最大深度返回的是数组个数减去一，因为预计算栅格中，最底层是以width=1进行计算的，等同原始栅格
   int max_depth() const { return precomputation_grids_.size() - 1; }
 
  private:
