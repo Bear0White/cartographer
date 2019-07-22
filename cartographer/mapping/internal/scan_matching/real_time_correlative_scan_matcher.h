@@ -22,7 +22,7 @@
 #include "cartographer/mapping/proto/scan_matching/real_time_correlative_scan_matcher_options.pb.h"
 
 /*
- * 虽然名字上大张旗鼓地写着实时关联扫描匹配器，但是里面根本没有相关类的定义，仅仅有参数转换相关的函数
+ * 虽然名字上大张旗鼓地写着"实时关联扫描匹配器"，但是里面根本没有相关类的定义，仅仅有配置参数格式转换的函数
  */
 
 namespace cartographer {
