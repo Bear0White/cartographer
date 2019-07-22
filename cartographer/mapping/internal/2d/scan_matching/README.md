@@ -50,3 +50,11 @@ translation_delta_cost_functor_2d --> ceres_scan_matcher_2d
 
 本文意在对Ceres扫描匹配器模块的功能和原理做一个系统的描述和解释。
 
+
+-----------
+调用：
+本模块最高层的，无法是三个扫描匹配器。它们在哪里被调用？
+
+local_trajectory_builder_2d 调用了ceres和实时的Match方法
+
+constraint_builder_2d 调用了fast和ceres的Match方法, 其中有fast的MatchFullSubmap
