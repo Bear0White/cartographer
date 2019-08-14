@@ -254,7 +254,7 @@ bool FastCorrelativeScanMatcher2D::Match(
 
 // 全地图匹配，最顶层的接口之一。和Match方法唯一的区别在于它没有初始位姿参数，而且搜索范围是整个地图
 // 所以制定SearchParameters的时候，单边平移搜索范围是一百万像素，单边旋转搜索范围是pi。而且初始位姿是整个地图的中心点。
-// 以此实现在所有地图上进行搜索
+// 以此实现在所有地图上进行搜索,仅在constraint_builder_2d被调用
 bool FastCorrelativeScanMatcher2D::MatchFullSubmap(
     const sensor::PointCloud& point_cloud, float min_score, float* score,
     transform::Rigid2d* pose_estimate) const {

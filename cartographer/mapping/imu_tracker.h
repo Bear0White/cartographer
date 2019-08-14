@@ -23,6 +23,11 @@
 namespace cartographer {
 namespace mapping {
 
+/*
+ * IMU追踪器，说明白点，就是实现了IMU数据的积分操作，从而跟踪IMU的位姿
+ * IMU原始数据包括了线性加速度和角速度
+ */
+
 // Keeps track of the orientation using angular velocities and linear
 // accelerations from an IMU. Because averaged linear acceleration (assuming
 // slow movement) is a direct measurement of gravity, roll/pitch does not drift,

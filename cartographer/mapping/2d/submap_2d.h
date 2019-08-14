@@ -37,9 +37,13 @@
 namespace cartographer {
 namespace mapping {
 
+// 配置参数格式转换：从lua到proto
 proto::SubmapsOptions2D CreateSubmapsOptions2D(
     common::LuaParameterDictionary* parameter_dictionary);
 
+/*
+ * 子地图
+ */
 class Submap2D : public Submap {
  public:
   Submap2D(const Eigen::Vector2f& origin, std::unique_ptr<Grid2D> grid,
@@ -48,21 +52,28 @@ class Submap2D : public Submap {
                     ValueConversionTables* conversion_tables);
 
   proto::Submap ToProto(bool include_grid_data) const override;
-  void UpdateFromProto(const proto::Submap& proto) override;
 
+  // 从一个proto流中更新地图
+  void UpdateFromProto(const proto::Submap& proto) override;
+  // 如果得到一个对子地图数据的请求，尝试把地图数据转换为proto::SubmapQuery::Response格式
   void ToResponseProto(const transform::Rigid3d& global_submap_pose,
                        proto::SubmapQuery::Response* response) const override;
-
+  
+  // 返回地图的栅格数据
   const Grid2D* grid() const { return grid_.get(); }
 
   // Insert 'range_data' into this submap using 'range_data_inserter'. The
   // submap must not be finished yet.
+  // 把某个扫描帧插入到子地图中去，使用一个插入器。注意这里是不含扫描匹配的
   void InsertRangeData(const sensor::RangeData& range_data,
                        const RangeDataInserterInterface* range_data_inserter);
+  // 结束一个子地图，不再插入扫描数据
   void Finish();
 
  private:
+  // 地图数据的本体
   std::unique_ptr<Grid2D> grid_;
+  // 查找表
   ValueConversionTables* conversion_tables_;
 };
 
@@ -76,6 +87,9 @@ class Submap2D : public Submap {
 // considered initialized: the old submap is no longer changed, the "new" submap
 // is now the "old" submap and is used for scan-to-map matching. Moreover, a
 // "new" submap gets created. The "old" submap is forgotten by this object.
+/*
+ * 第一个激活的子地图会被创建，当处理第一个扫描帧的时候。
+ */
 class ActiveSubmaps2D {
  public:
   explicit ActiveSubmaps2D(const proto::SubmapsOptions2D& options);
@@ -84,9 +98,11 @@ class ActiveSubmaps2D {
   ActiveSubmaps2D& operator=(const ActiveSubmaps2D&) = delete;
 
   // Inserts 'range_data' into the Submap collection.
+  // 插入一个扫描帧到某些子地图中（应该是两个或一个），返回一个指针数组，表示插入到的子地图们
   std::vector<std::shared_ptr<const Submap2D>> InsertRangeData(
       const sensor::RangeData& range_data);
-
+  
+  // 返回内部包含的子地图们
   std::vector<std::shared_ptr<const Submap2D>> submaps() const;
 
  private:

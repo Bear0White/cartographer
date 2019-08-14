@@ -25,6 +25,10 @@ namespace sensor {
 
 namespace {
 
+/*
+ * 根据最大距离值去对点云(一帧扫描数据)进行滤波，直接把点云中超出最大距离的激光点去掉
+ * 重申，点云PointCloud是激光点RangefinderPoint的数组，后者仅有一个position成员，是一个三维向量
+ */
 PointCloud FilterByMaxRange(const PointCloud& point_cloud,
                             const float max_range) {
   PointCloud result;
@@ -39,15 +43,30 @@ PointCloud FilterByMaxRange(const PointCloud& point_cloud,
 PointCloud AdaptivelyVoxelFiltered(
     const proto::AdaptiveVoxelFilterOptions& options,
     const PointCloud& point_cloud) {
+  // 如果点云数据已经很少，少于指定的"最少点数目",那么没必要滤波，直接返回
+  // [猜测数量点太少，应该是没法用的]
   if (point_cloud.size() <= options.min_num_points()) {
     // 'point_cloud' is already sparse enough.
     return point_cloud;
   }
+  // 以options.max_length为参数构建体素滤波器，对点云数据进行滤波
+  // 显然，这里的max_length是分辨率，滤波过程是“把点云数据以指定分辨率做离散化，过滤空间中过于靠近的点”
   PointCloud result = VoxelFilter(options.max_length()).Filter(point_cloud);
+  // 如果发现过滤后有足够的点，足够指定的"最少点数目",则可以直接返回
   if (result.size() >= options.min_num_points()) {
     // Filtering with 'max_length' resulted in a sufficiently dense point cloud.
     return result;
   }
+  
+  /*
+   * 如果滤波后没有足够的点，则不断降低分辨率，直至为原分辨率的百分之一，以期可以获得更多的点
+   * 具体的过程也很有趣，用了二分搜索(比较这里是浮点范围的搜索，没法直接用STL),来获得最佳分辨率
+   * for high = ori_high; high > ori_high / 100; high /= 2.0:
+   *    low = high / 2;
+   *    if filtered points at low is enough:
+   *      binary search in [low, high], from high side, until find one enougth
+   */
+
   // Search for a 'low_length' that is known to result in a sufficiently
   // dense point cloud. We give up and use the full 'point_cloud' if reducing
   // the edge length by a factor of 1e-2 is not enough.
@@ -78,6 +97,9 @@ PointCloud AdaptivelyVoxelFiltered(
 
 }  // namespace
 
+/*
+ * Filter 方法，参数是PointCloud类型
+ */
 PointCloud VoxelFilter::Filter(const PointCloud& point_cloud) {
   PointCloud results;
   for (const RangefinderPoint& point : point_cloud) {
@@ -116,6 +138,10 @@ std::vector<TimedPointCloudOriginData::RangeMeasurement> VoxelFilter::Filter(
   return results;
 }
 
+/*
+ * KeyType是一个32*3的bitset，把一个三维整形向量依次填充到其中去
+ * 第一个元素的二进制形式填充到bitset的前32位，第二个元素到中间32位，... 以此类推
+ */
 VoxelFilter::KeyType VoxelFilter::IndexToKey(const Eigen::Array3i& index) {
   KeyType k_0(static_cast<uint32>(index[0]));
   KeyType k_1(static_cast<uint32>(index[1]));
@@ -123,6 +149,13 @@ VoxelFilter::KeyType VoxelFilter::IndexToKey(const Eigen::Array3i& index) {
   return (k_0 << 2 * 32) | (k_1 << 1 * 32) | k_2;
 }
 
+/*
+ * 把一个三维点的坐标离散化
+ * 相当于根据resolution_建立立体网格，求出三维点在网格中的位置
+ * 具体计算过程也仅仅是坐标除以分辨率然后做四舍五入
+ * [总觉得对于立体网格来说，向下取整而不是四舍五入更合理些吧，如果是四舍五入，
+ * 就相当于把三维点对准在了网格“刻度”处而不是网格“内部”,不过这对于滤波整体结果影响不大]
+ */
 Eigen::Array3i VoxelFilter::GetCellIndex(const Eigen::Vector3f& point) const {
   Eigen::Array3f index = point.array() / resolution_;
   return Eigen::Array3i(common::RoundToInt(index.x()),
@@ -130,6 +163,9 @@ Eigen::Array3i VoxelFilter::GetCellIndex(const Eigen::Vector3f& point) const {
                         common::RoundToInt(index.z()));
 }
 
+/*
+ * 自适应体素滤波器的配置参数格式转换：从lua到proto
+ */
 proto::AdaptiveVoxelFilterOptions CreateAdaptiveVoxelFilterOptions(
     common::LuaParameterDictionary* const parameter_dictionary) {
   proto::AdaptiveVoxelFilterOptions options;
@@ -140,10 +176,18 @@ proto::AdaptiveVoxelFilterOptions CreateAdaptiveVoxelFilterOptions(
   return options;
 }
 
+/*
+ * 自适应体素滤波器的构造函数，仅仅初始化options_成员
+ */
 AdaptiveVoxelFilter::AdaptiveVoxelFilter(
     const proto::AdaptiveVoxelFilterOptions& options)
     : options_(options) {}
 
+/*
+ * 自适应体素滤波器中唯一的方法：Filter
+ * 参数：PointCloud，点云，数据格式是激光点的数组
+ * 内容：仅仅是调用AdaptivelyVoxelFiltered和FilterByMaxRange函数
+ */
 PointCloud AdaptiveVoxelFilter::Filter(const PointCloud& point_cloud) const {
   return AdaptivelyVoxelFiltered(
       options_, FilterByMaxRange(point_cloud, options_.max_range()));

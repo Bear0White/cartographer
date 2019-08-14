@@ -25,25 +25,47 @@
 namespace cartographer {
 namespace mapping {
 
+/*
+ * 关于TimedPointCloudData的定义：
+ * struct TimedPointCloudData { common::Time time; Eigen::Vector3f origin; TimedPointCloud ranges; };
+ * using TimedPointCloud = std::vector<TimedRangefinderPoint>;
+ * struct TimedRangefinderPoint { Eigen::Vector3f position; float time; };
+ */
+
 sensor::TimedPointCloudOriginData RangeDataCollator::AddRangeData(
     const std::string& sensor_id,
     const sensor::TimedPointCloudData& timed_point_cloud_data) {
+
+  /*
+   * 这个函数做了什么：它调整了current_start_和end_两个量，然后去调用CropAndMerge来获取结果并返回
+   */
+
   CHECK_NE(expected_sensor_ids_.count(sensor_id), 0);
   // TODO(gaschler): These two cases can probably be one.
+  // id_to_pending_data_ 类型是 map<string, sensor::TimedPointCloudData>，相当于传感器数据记录表
+  // 注意，这里是一个map，意味着一个传感器只能有一组数据。这里的组指的是旋转式雷达的一个扫描周期
+  // 如果记录表中已经有这个传感器的数据了
   if (id_to_pending_data_.count(sensor_id) != 0) {
+    // 更新区间起始点
     current_start_ = current_end_;
     // When we have two messages of the same sensor, move forward the older of
     // the two (do not send out current).
+    // 终止点就是该记录表中该传感器的时间点
     current_end_ = id_to_pending_data_.at(sensor_id).time;
     auto result = CropAndMerge();
+    // 更新记录表
     id_to_pending_data_.emplace(sensor_id, timed_point_cloud_data);
     return result;
   }
+  // 如果记录表中没有这个传感器的数据，那就添加进去
   id_to_pending_data_.emplace(sensor_id, timed_point_cloud_data);
+  // 如果期望的传感器列表中，有的传感器没有数据被记录，则返回空数据
   if (expected_sensor_ids_.size() != id_to_pending_data_.size()) {
     return {};
   }
+  // 如果所有的期望传感器数据都有是数据：调整区间起始点，是当前的end
   current_start_ = current_end_;
+  // 以下是调整区间终止点，是所有记录表中的最旧的时刻
   // We have messages from all sensors, move forward to oldest.
   common::Time oldest_timestamp = common::Time::max();
   for (const auto& pair : id_to_pending_data_) {
@@ -53,12 +75,18 @@ sensor::TimedPointCloudOriginData RangeDataCollator::AddRangeData(
   return CropAndMerge();
 }
 
+/*
+ *
+ * 看到最后忍不住就要骂人了，数据结构这么混乱复杂
+ */
 sensor::TimedPointCloudOriginData RangeDataCollator::CropAndMerge() {
   sensor::TimedPointCloudOriginData result{current_end_, {}, {}};
   bool warned_for_dropped_points = false;
   for (auto it = id_to_pending_data_.begin();
        it != id_to_pending_data_.end();) {
+    // TimedPointCloudData 里面包含了common::Time time; Eigen::Vector3f origin; TimedPointCloud ranges;
     sensor::TimedPointCloudData& data = it->second;
+    // 带时间的点云本质是一个数组，元素包含了扫描点坐标和相对时间
     sensor::TimedPointCloud& ranges = it->second.ranges;
 
     auto overlap_begin = ranges.begin();

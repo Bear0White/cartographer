@@ -26,6 +26,7 @@
 namespace cartographer {
 namespace mapping {
 
+// 下面这些东西估计都是做评价用的，暂且不论
 static auto* kLocalSlamLatencyMetric = metrics::Gauge::Null();
 static auto* kLocalSlamRealTimeRatio = metrics::Gauge::Null();
 static auto* kLocalSlamCpuRealTimeRatio = metrics::Gauge::Null();
@@ -35,6 +36,7 @@ static auto* kCeresScanMatcherCostMetric = metrics::Histogram::Null();
 static auto* kScanMatcherResidualDistanceMetric = metrics::Histogram::Null();
 static auto* kScanMatcherResidualAngleMetric = metrics::Histogram::Null();
 
+// 局部轨迹建立者的构造函数，仅仅是成员的初始化而已
 LocalTrajectoryBuilder2D::LocalTrajectoryBuilder2D(
     const proto::LocalTrajectoryBuilderOptions2D& options,
     const std::vector<std::string>& expected_range_sensor_ids)
@@ -48,6 +50,11 @@ LocalTrajectoryBuilder2D::LocalTrajectoryBuilder2D(
 
 LocalTrajectoryBuilder2D::~LocalTrajectoryBuilder2D() {}
 
+/*
+ * 转换到重力矫正坐标系下并滤波：
+ * 参数：重力矫正坐标系的位姿变换，点云数据
+ * 操作：直接把点云应用上重力校正坐标系的位姿变换，截取指定z值范围内的数据，然后用sensor::VoxelFilter进行滤波
+ */
 sensor::RangeData
 LocalTrajectoryBuilder2D::TransformToGravityAlignedFrameAndFilter(
     const transform::Rigid3f& transform_to_gravity_aligned_frame,
@@ -62,6 +69,10 @@ LocalTrajectoryBuilder2D::TransformToGravityAlignedFrameAndFilter(
       sensor::VoxelFilter(options_.voxel_filter_size()).Filter(cropped.misses)};
 }
 
+/*
+ * 扫描匹配，具体来说，是给active_submaps_中的前图做的匹配
+ * 
+ */
 std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
     const common::Time time, const transform::Rigid2d& pose_prediction,
     const sensor::PointCloud& filtered_gravity_aligned_point_cloud) {
@@ -73,7 +84,8 @@ std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
   // The online correlative scan matcher will refine the initial estimate for
   // the Ceres scan matcher.
   transform::Rigid2d initial_ceres_pose = pose_prediction;
-
+  
+  // 如果配置参数中有相关配置，则用实时相关匹配器做匹配，作为ceres匹配器的初始值
   if (options_.use_online_correlative_scan_matching()) {
     const double score = real_time_correlative_scan_matcher_.Match(
         pose_prediction, filtered_gravity_aligned_point_cloud,
@@ -81,12 +93,15 @@ std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
     kRealTimeCorrelativeScanMatcherScoreMetric->Observe(score);
   }
 
+  // 用ceres匹配器做精准匹配
   auto pose_observation = absl::make_unique<transform::Rigid2d>();
   ceres::Solver::Summary summary;
   ceres_scan_matcher_.Match(pose_prediction.translation(), initial_ceres_pose,
                             filtered_gravity_aligned_point_cloud,
                             *matching_submap->grid(), pose_observation.get(),
                             &summary);
+  
+  // 以下猜测是做评估
   if (pose_observation) {
     kCeresScanMatcherCostMetric->Observe(summary.final_cost);
     const double residual_distance =
@@ -101,10 +116,16 @@ std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
   return pose_observation;
 }
 
+/*
+ * 添加激光数据，
+ * 首先强调一下参数，带时间的点云Data，内部包含了一个基准时间，一个原点，各个扫描点的空间位置和相对时间
+ * 这种数据类型猜测用来描述旋转式雷达用的
+ */
 std::unique_ptr<LocalTrajectoryBuilder2D::MatchingResult>
 LocalTrajectoryBuilder2D::AddRangeData(
     const std::string& sensor_id,
     const sensor::TimedPointCloudData& unsynchronized_data) {
+  // unsynchronized就是非同步的意思，而collator是整理器的意思，就是把原来非同步的数据进行整理
   auto synchronized_data =
       range_data_collator_.AddRangeData(sensor_id, unsynchronized_data);
   if (synchronized_data.ranges.empty()) {

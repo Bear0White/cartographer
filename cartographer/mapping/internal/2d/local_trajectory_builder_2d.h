@@ -35,6 +35,17 @@
 #include "cartographer/sensor/range_data.h"
 #include "cartographer/transform/rigid_transform.h"
 
+/*
+ * 几乎可以认为是前端的最核心模块
+ * 对调用的mapping下的模块做一个简要整理：
+ * 2d/submap_2d
+ * internal/2d/scan_matching/ceres_scan_matcher_2d
+ * internal/2d/scan_matching/real_time_correlative_scan_matcher_2d
+ * internal/motion_filter
+ * internal/range_data_collator
+ * pose_extrapolator
+ */
+
 namespace cartographer {
 namespace mapping {
 
@@ -47,10 +58,19 @@ namespace mapping {
  */
 class LocalTrajectoryBuilder2D {
  public:
+  /*
+   * 插入结果，就是把一帧扫描数据插入到子地图当中。
+   */
   struct InsertionResult {
+    //Data, 节点上记录的数据，包括时间，重力方向角，经过滤波和重力校正的点云数据，在局部SLAM中的位姿【这个局部SLAM指的是什么？】
     std::shared_ptr<const TrajectoryNode::Data> constant_data;
+    // 一个子地图(指针)数组，记录了一帧数据插入到了哪些子地图中
     std::vector<std::shared_ptr<const Submap2D>> insertion_submaps;
   };
+  
+  /*
+   * 匹配结果，包括了时间点，本地pose[?], 扫描数据，一个插入结果的指针
+   */
   struct MatchingResult {
     common::Time time;
     transform::Rigid3d local_pose;
@@ -59,6 +79,11 @@ class LocalTrajectoryBuilder2D {
     std::unique_ptr<const InsertionResult> insertion_result;
   };
 
+  /*
+   * 构造函数，从proto流里面获取配置参数，并需要一个传感器名称数组，表示期望接受的传感器数据
+   * 强调一下，sensor_id这里的ID不是index，而是传感器的名字
+   * 传感器名称数组仅仅用来初始化range_data_collator_成员
+   */
   explicit LocalTrajectoryBuilder2D(
       const proto::LocalTrajectoryBuilderOptions2D& options,
       const std::vector<std::string>& expected_range_sensor_ids);
@@ -72,12 +97,23 @@ class LocalTrajectoryBuilder2D {
   // for 2D SLAM. `TimedPointCloudData::time` is when the last point in
   // `range_data` was acquired, `TimedPointCloudData::ranges` contains the
   // relative time of point with respect to `TimedPointCloudData::time`.
+
+  /*
+   * 添加一帧扫描数据，需要参数：
+   * 传感器名称，和TimedPointCloudData类型的扫描数据
+   * 根据注释所说，这里的RangeData应该值的是旋转扫描的传感器。
+   * TimedPointCloudData::time是最后一个激光点被捕获的时间，TimedPointCloudData::ranges对象包含了相对于这个时刻的相对时间
+   * 预计内部会完成扫描匹配和插入操作，最后返回一个MatchingResult类型的结果
+   */
   std::unique_ptr<MatchingResult> AddRangeData(
       const std::string& sensor_id,
       const sensor::TimedPointCloudData& range_data);
+  //添加一帧IMU数据
   void AddImuData(const sensor::ImuData& imu_data);
+  // 添加一帧里程计数据
   void AddOdometryData(const sensor::OdometryData& odometry_data);
-
+  
+  // 下面这个东西应该是作为评价指标来用的，暂且不论
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
  private:

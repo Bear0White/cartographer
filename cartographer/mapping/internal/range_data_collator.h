@@ -26,10 +26,13 @@ namespace cartographer {
 namespace mapping {
 
 // Synchronizes TimedPointCloudData from different sensors. Input needs only be
-// monotonous in 'TimedPointCloudData::time', output is monotonous in per-point
+// monotonous单调 in 'TimedPointCloudData::time', output is monotonous单调 in per-point
 // timing. Up to one message per sensor is buffered, so a delay of the period of
-// the slowest sensor may be introduced, which can be alleviated by passing
-// subdivisions.
+// the slowest sensor may be introduced, which can be alleviated减轻 by passing
+// subdivisions细分.
+/*
+ * 从注释来看，这个东西是协调多个传感器的
+ */
 class RangeDataCollator {
  public:
   explicit RangeDataCollator(

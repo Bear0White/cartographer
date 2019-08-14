@@ -42,6 +42,9 @@ TimedPointCloud TransformTimedPointCloud(const TimedPointCloud& point_cloud,
   return result;
 }
 
+/*
+ * 对一帧扫描数据，以min_z和max_z作为边界做截断，仅此而已
+ */
 PointCloud CropPointCloud(const PointCloud& point_cloud, const float min_z,
                           const float max_z) {
   PointCloud cropped_point_cloud;

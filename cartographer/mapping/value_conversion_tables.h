@@ -37,11 +37,15 @@ namespace mapping {
 // is set to 'unknown_result'.
 class ValueConversionTables {
  public:
+  // 唯一的方法：获取一个查找表
+  // 映射的方式是从16位整形到浮点，但是16位整形的最高位是作为标志位来使用的，所以映射范围是：
+  // 0 is unknown, [1, 32767] maps to [lower_bound, upper_bound]
   const std::vector<float>* GetConversionTable(float unknown_result,
                                                float lower_bound,
                                                float upper_bound);
 
  private:
+  // 我还不知道浮点也可以作为map的键值
   std::map<const std::tuple<float /* unknown_result */, float /* lower_bound */,
                             float /* upper_bound */>,
            std::unique_ptr<const std::vector<float>>>

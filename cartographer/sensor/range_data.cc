@@ -40,6 +40,11 @@ TimedRangeData TransformTimedRangeData(const TimedRangeData& range_data,
   };
 }
 
+/*
+ * 对一帧RangeData，以min_z和max_z为区间进行截断，仅此而已
+ * 注意RangeData里面包括了原点，returns点云和misses点云，所有点云数据都会做截断
+ * 重申数据结构：点云PointCloud是激光点RangefinderPoint的数组
+ */
 RangeData CropRangeData(const RangeData& range_data, const float min_z,
                         const float max_z) {
   return RangeData{range_data.origin,
