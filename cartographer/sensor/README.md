@@ -1,0 +1,10 @@
+collate本意是“核对，整理”，最高层的派生类有两个：
+- internal/collator
+- internal/trajectory_collator
+
+两个都是以collator_interface为接口类派生出来，但核心的操作都是调用的internal/ordered_multi_queue里面的内容
+
+这两个类都直接在map_builder类中被调用，后者存在一个成员：sensor_collator_，它会根据配置参数中的collate_by_trajectory初始化成两个类的其中一个。作用是用来构造一个CollatedTrajectoryBuilder对象，并压入相关队列。
+
+
+

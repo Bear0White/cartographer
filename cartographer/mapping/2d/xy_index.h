@@ -31,6 +31,10 @@
 namespace cartographer {
 namespace mapping {
 
+/*
+ * 网格边界，通常在MapLimits中使用，描述一个离散网格在x和y方向上的数量
+ * 内部也仅仅有两个成员：num_x_cells，num_y_cells而已
+ */
 struct CellLimits {
   CellLimits() = default;
   CellLimits(int init_num_x_cells, int init_num_y_cells)
@@ -44,6 +48,7 @@ struct CellLimits {
   int num_y_cells = 0;
 };
 
+// 转换到Proto
 inline proto::CellLimits ToProto(const CellLimits& cell_limits) {
   proto::CellLimits result;
   result.set_num_x_cells(cell_limits.num_x_cells);
@@ -51,6 +56,18 @@ inline proto::CellLimits ToProto(const CellLimits& cell_limits) {
   return result;
 }
 
+/*
+ * 一个对二维矩阵进行遍历的迭代器，遍历时以行为主次序，列为副次序
+ * 构造函数：
+ *  - 以Eigen::Array2i类型的最小边界和最大边界为参数构造
+ *  - 以CellLimits为参数构造
+ * 方法：
+ *  - 重载++: 迭代下一个位置
+ *  - 重载*: 返回当前位置坐标，是Eigen::Array2i格式
+ *  - ==和!= :返回是否等于和不等于另一个迭代器
+ *  - begin(): 返回开始位置，就是构造函数中min参数描述的位置
+ *  - end(): 返回尾后位置，就是构造函数中max参数描述的位置进行++后到达的下一个位置
+ */
 // Iterates in row-major order through a range of xy-indices.
 class XYIndexRangeIterator
     : public std::iterator<std::input_iterator_tag, Eigen::Array2i> {
@@ -63,6 +80,7 @@ class XYIndexRangeIterator
         xy_index_(min_xy_index) {}
 
   // Constructs a new iterator for everything contained in 'cell_limits'.
+  // 注意以CellLimits构造时，num_x_cells是网格数目，对应到迭代器范围就是[0, num-1]
   explicit XYIndexRangeIterator(const CellLimits& cell_limits)
       : XYIndexRangeIterator(Eigen::Array2i::Zero(),
                              Eigen::Array2i(cell_limits.num_x_cells - 1,
@@ -95,7 +113,8 @@ class XYIndexRangeIterator
   XYIndexRangeIterator begin() {
     return XYIndexRangeIterator(min_xy_index_, max_xy_index_);
   }
-
+  
+  // 这里留意一下：end就是最后一个位置进行++操作后到达的位置，因为end()本来就是配合++来使用的
   XYIndexRangeIterator end() {
     XYIndexRangeIterator it = begin();
     it.xy_index_ = Eigen::Array2i(min_xy_index_.x(), max_xy_index_.y() + 1);

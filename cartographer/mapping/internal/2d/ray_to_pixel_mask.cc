@@ -19,7 +19,7 @@
 #include "Eigen/Dense"
 
 namespace cartographer {
-namespace mapping {
+namespace mapping {   
 namespace {
 
 bool isEqual(const Eigen::Array2i& lhs, const Eigen::Array2i& rhs) {

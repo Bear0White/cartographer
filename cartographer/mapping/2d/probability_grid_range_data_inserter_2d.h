@@ -32,10 +32,18 @@
 namespace cartographer {
 namespace mapping {
 
+// 配置参数：从lua到proto
 proto::ProbabilityGridRangeDataInserterOptions2D
 CreateProbabilityGridRangeDataInserterOptions2D(
     common::LuaParameterDictionary* parameter_dictionary);
 
+/*
+ * 栅格地图激光帧插入器
+ * 从接口里面继承，接口里面仅仅定义了Insert方法而已
+ * 构造函数：从配置参数构造
+ * 方法：Insert：把激光帧插入到一个网格中
+ * 私有成员：配置参数，一个记录所有hits点的列表，一个记录所有miss点的列表
+ */
 class ProbabilityGridRangeDataInserter2D : public RangeDataInserterInterface {
  public:
   explicit ProbabilityGridRangeDataInserter2D(

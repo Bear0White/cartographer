@@ -30,6 +30,9 @@
 namespace cartographer {
 namespace sensor {
 
+/*
+ * Collator类相当于是对OrderedMultiQueue类的高级封装，核心操作都是调用了后者的方法
+ */
 class Collator : public CollatorInterface {
  public:
   Collator() {}

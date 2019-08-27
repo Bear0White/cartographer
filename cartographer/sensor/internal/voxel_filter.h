@@ -33,12 +33,15 @@ namespace sensor {
 // clouds.
 
 /*
+ * 体素滤波器，完成对激光点的滤波操作
+ * 构造函数：以浮点类型的分辨率进行构造，分辨率用以对激光点数据做离散化
  * 方法：Filter，分别定义了对三种数据的滤波操作：
  * - PointCloud
  * - TimedPointCloud
  * - vector<TimedPointCloudOriginData::RangeMeasurement>
  * 关于滤波操作：
  * 可以概括为：“把点云数据以指定分辨率做离散化，过滤空间中过于靠近的点”
+ * 在滤波过程中，可以动态调节分辨率，使得尽量满足参数min_num_points指定的最小数量，又充分滤掉过近的点
  */
 class VoxelFilter {
  public:
@@ -86,7 +89,7 @@ proto::AdaptiveVoxelFilterOptions CreateAdaptiveVoxelFilterOptions(
 /*
  * 自适应体素滤波器
  * 构造函数：从配置参数中构造
- * 方法：Filter，对点云进行滤波处理
+ * 方法：Filter，对点云进行滤波处理,核心还是调用了VoxelFilter类中的Filter方法
  */
 class AdaptiveVoxelFilter {
  public:

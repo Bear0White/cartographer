@@ -51,7 +51,7 @@ LocalTrajectoryBuilder2D::LocalTrajectoryBuilder2D(
 LocalTrajectoryBuilder2D::~LocalTrajectoryBuilder2D() {}
 
 /*
- * 转换到重力矫正坐标系下并滤波：
+ * 把扫描数据转换到重力矫正坐标系下并滤波：
  * 参数：重力矫正坐标系的位姿变换，点云数据
  * 操作：直接把点云应用上重力校正坐标系的位姿变换，截取指定z值范围内的数据，然后用sensor::VoxelFilter进行滤波
  */
@@ -114,7 +114,7 @@ std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
     kScanMatcherResidualAngleMetric->Observe(residual_angle);
   }
   return pose_observation;
-}
+}-
 
 /*
  * 添加激光数据，
@@ -297,17 +297,21 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeData(
                      std::move(insertion_result)});
 }
 
+// 实现插入扫描帧到子地图的顶层函数
 std::unique_ptr<LocalTrajectoryBuilder2D::InsertionResult>
 LocalTrajectoryBuilder2D::InsertIntoSubmap(
     const common::Time time, const sensor::RangeData& range_data_in_local,
     const sensor::PointCloud& filtered_gravity_aligned_point_cloud,
     const transform::Rigid3d& pose_estimate,
     const Eigen::Quaterniond& gravity_alignment) {
+  // 运动过滤器唯一用到的地方：如果在较短时间内发生了较小的运动，则过滤掉
   if (motion_filter_.IsSimilar(time, pose_estimate)) {
     return nullptr;
   }
+  // 插入一帧激光数据，引发active_submpas_更新子地图，可能会引发新建子地图的操作
   std::vector<std::shared_ptr<const Submap2D>> insertion_submaps =
       active_submaps_.InsertRangeData(range_data_in_local);
+  // 插入后，把结果返回
   return absl::make_unique<InsertionResult>(InsertionResult{
       std::make_shared<const TrajectoryNode::Data>(TrajectoryNode::Data{
           time,

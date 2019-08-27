@@ -24,6 +24,7 @@ namespace cartographer {
 namespace mapping {
 namespace {
 
+// 从执行过程看，应该是从lua字典中提取某些信息，传递给trajectory_builder_options
 void PopulatePureLocalizationTrimmerOptions(
     proto::TrajectoryBuilderOptions* const trajectory_builder_options,
     common::LuaParameterDictionary* const parameter_dictionary) {
@@ -39,6 +40,7 @@ void PopulatePureLocalizationTrimmerOptions(
 
 }  // namespace
 
+// 配置参数：从lua到proto
 proto::TrajectoryBuilderOptions CreateTrajectoryBuilderOptions(
     common::LuaParameterDictionary* const parameter_dictionary) {
   proto::TrajectoryBuilderOptions options;
@@ -56,6 +58,7 @@ proto::TrajectoryBuilderOptions CreateTrajectoryBuilderOptions(
   return options;
 }
 
+// 转换到proto
 proto::SensorId ToProto(const TrajectoryBuilderInterface::SensorId& sensor_id) {
   proto::SensorId sensor_id_proto;
   switch (sensor_id.type) {
@@ -84,6 +87,7 @@ proto::SensorId ToProto(const TrajectoryBuilderInterface::SensorId& sensor_id) {
   return sensor_id_proto;
 }
 
+// 从Proto中获取数据
 TrajectoryBuilderInterface::SensorId FromProto(
     const proto::SensorId& sensor_id_proto) {
   TrajectoryBuilderInterface::SensorId sensor_id;

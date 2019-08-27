@@ -25,6 +25,7 @@
 namespace cartographer {
 namespace mapping {
 
+// 构造函数：仅仅完成成员的初始化而已
 PoseExtrapolator::PoseExtrapolator(const common::Duration pose_queue_duration,
                                    double imu_gravity_time_constant)
     : pose_queue_duration_(pose_queue_duration),
@@ -32,6 +33,7 @@ PoseExtrapolator::PoseExtrapolator(const common::Duration pose_queue_duration,
       cached_extrapolated_pose_{common::Time::min(),
                                 transform::Rigid3d::Identity()} {}
 
+// 隐式构造函数：比构造函数多了一个ImuData
 std::unique_ptr<PoseExtrapolator> PoseExtrapolator::InitializeWithImu(
     const common::Duration pose_queue_duration,
     const double imu_gravity_time_constant, const sensor::ImuData& imu_data) {

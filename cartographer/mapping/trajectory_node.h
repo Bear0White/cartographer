@@ -41,7 +41,17 @@ struct TrajectoryNodePose {
   absl::optional<ConstantPoseData> constant_pose_data;
 };
 
+/*
+ * 轨迹节点，每个节点记录了某个时刻的传感器信息，一个轨迹由若干节点构成。
+ * 整个结构体包括了Data的定义。结构体内部包括了一个Data的智能指针，一个本地位姿数据
+ */ 
+
 struct TrajectoryNode {
+  
+  /*
+   * Data, 节点上记录的数据，包括时间，重力方向角，经过滤波和重力校正的点云数据，在局部SLAM中的位姿
+   * 最后的局部slam的位姿猜测是相对于子地图的位姿吧？但为什么没有子地图相关的数据？
+   */
   struct Data {
     common::Time time;
 

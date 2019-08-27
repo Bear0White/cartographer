@@ -46,11 +46,13 @@ OrderedMultiQueue::~OrderedMultiQueue() {
   }
 }
 
+// 添加一个queue，仅仅是在queues_里面添加了新元素并初始化了callback而已
 void OrderedMultiQueue::AddQueue(const QueueKey& queue_key, Callback callback) {
   CHECK_EQ(queues_.count(queue_key), 0);
   queues_[queue_key].callback = std::move(callback);
 }
 
+// 给某个指定的Queue标记为完成，然后调用Dispatch
 void OrderedMultiQueue::MarkQueueAsFinished(const QueueKey& queue_key) {
   auto it = queues_.find(queue_key);
   CHECK(it != queues_.end()) << "Did not find '" << queue_key << "'.";
@@ -60,6 +62,8 @@ void OrderedMultiQueue::MarkQueueAsFinished(const QueueKey& queue_key) {
   Dispatch();
 }
 
+// 给某个指定的Queue添加数据
+// 如果这个Queue不存在，则return；否则给Queue添加数据，然后Dispatch
 void OrderedMultiQueue::Add(const QueueKey& queue_key,
                             std::unique_ptr<Data> data) {
   auto it = queues_.find(queue_key);
@@ -72,6 +76,7 @@ void OrderedMultiQueue::Add(const QueueKey& queue_key,
   Dispatch();
 }
 
+// 遍历所有的Queue，把所有未完成的Queue使用MarkQueueAsFinished标记成完成并调用Dispatch
 void OrderedMultiQueue::Flush() {
   std::vector<QueueKey> unfinished_queues;
   for (auto& entry : queues_) {
@@ -84,6 +89,7 @@ void OrderedMultiQueue::Flush() {
   }
 }
 
+// 得到blocker_
 QueueKey OrderedMultiQueue::GetBlocker() const {
   CHECK(!queues_.empty());
   return blocker_;
@@ -94,16 +100,23 @@ void OrderedMultiQueue::Dispatch() {
     const Data* next_data = nullptr;
     Queue* next_queue = nullptr;
     QueueKey next_queue_key;
+    // 遍历所有的Queue
     for (auto it = queues_.begin(); it != queues_.end();) {
+      // 尝试取出Queue的头部元素
       const auto* data = it->second.queue.Peek<Data>();
+      // 如果Queue没有头部元素，即Queue已经空了
       if (data == nullptr) {
+        // 如果Queue已经被标记为结束，则直接把这个Queue从队列中删掉，迭代下一个Queue
         if (it->second.finished) {
-          queues_.erase(it++);
+          queues_.erase(it++); //这样做不太好，似乎迭代器会失效？
           continue;
         }
+        // 如果Queue没有标记为结束，则把这个Queue的键存入blocker_中并从整个函数中返回
+        // 所以，如果发现有空的Queue却没有标记结束，则保存在blocker_并结束整个函数，注意是整个函数
         CannotMakeProgress(it->first);
         return;
       }
+      // 用“擂台法”去搜索所有Queue里面，头部元素的时间最小的那个
       if (next_data == nullptr || data->GetTime() < next_data->GetTime()) {
         next_data = data;
         next_queue = &it->second;
@@ -113,6 +126,7 @@ void OrderedMultiQueue::Dispatch() {
           << "Non-sorted data added to queue: '" << it->first << "'";
       ++it;
     }
+    // 如果next_data为空，显然此时queues_为空,直接返回
     if (next_data == nullptr) {
       CHECK(queues_.empty());
       return;
@@ -120,6 +134,7 @@ void OrderedMultiQueue::Dispatch() {
 
     // If we haven't dispatched any data for this trajectory yet, fast forward
     // all queues of this trajectory until a common start time has been reached.
+    // 根据GetCommonStartTime函数的阅读结果，整个函数返回的是这个轨迹号下第一条添加的数据的时间戳
     const common::Time common_start_time =
         GetCommonStartTime(next_queue_key.trajectory_id);
 
@@ -148,6 +163,7 @@ void OrderedMultiQueue::Dispatch() {
   }
 }
 
+// 名字很奇怪，无法执行程序。实际内部的有效操作也仅仅把queue_key保存到blocker_中
 void OrderedMultiQueue::CannotMakeProgress(const QueueKey& queue_key) {
   blocker_ = queue_key;
   for (auto& entry : queues_) {
@@ -158,13 +174,27 @@ void OrderedMultiQueue::CannotMakeProgress(const QueueKey& queue_key) {
   }
 }
 
+/*
+ * 查找某个轨迹号的公用起始时间，毕竟一个轨迹号可以有很多传感器的队列
+ * 核心用到了common_start_time_per_trajectory_成员，这个东西就是用来记录查找结果的，避免重复查找
+ * 首先看看有没有记录，有的话直接返回；如果没有，则插入一条记录，并且寻找该轨迹号的所有Queue，把头部元素时间戳最大者作为结果返回，并更新这个记录
+ * 简单来说，返回所有该轨迹号下的Queue中队首元素最大的时间戳
+ * [如果某个记录一旦插入，则对该轨迹号的任何查找都会直接返回该条记录，如果队列更新了怎么办？]
+ * [在每次Dispatch就会调用此函数，而每次Add添加数据都会Dispatch，就是说某个轨迹号的第一条数据添加后，就会调用此函数，
+ *  会得到第一条数据的时间戳，然后轨迹号的commontime不就确定了不再改变了么]
+ */
 common::Time OrderedMultiQueue::GetCommonStartTime(const int trajectory_id) {
+  // 成员common_start_time_per_trajectory_仅仅在这个函数中有用到
   auto emplace_result = common_start_time_per_trajectory_.emplace(
       trajectory_id, common::Time::min());
+  // emplace函数原型是这样的：pair<iterator,bool> emplace (Args&&... args);
+  // 返回的是迭代器和bool的一个pair，如果插入成功，则返回新元素的迭代器和true；否则返回已存在的元素的迭代器和false
   common::Time& common_start_time = emplace_result.first->second;
+  // 如果插入成功了，则找到所有Queues中队首元素时间最大者，作为common_start_time返回
   if (emplace_result.second) {
     for (auto& entry : queues_) {
       if (entry.first.trajectory_id == trajectory_id) {
+        // 注意这里的common_start_time是引用，修改其值会影响原数据
         common_start_time = std::max(
             common_start_time, entry.second.queue.Peek<Data>()->GetTime());
       }

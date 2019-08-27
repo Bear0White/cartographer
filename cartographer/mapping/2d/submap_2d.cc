@@ -33,6 +33,7 @@
 namespace cartographer {
 namespace mapping {
 
+// 配置参数格式转换
 proto::SubmapsOptions2D CreateSubmapsOptions2D(
     common::LuaParameterDictionary* const parameter_dictionary) {
   proto::SubmapsOptions2D options;
@@ -75,6 +76,7 @@ Submap2D::Submap2D(const Eigen::Vector2f& origin, std::unique_ptr<Grid2D> grid,
   grid_ = std::move(grid);
 }
 
+// 从流中构造Submap
 Submap2D::Submap2D(const proto::Submap2D& proto,
                    ValueConversionTables* conversion_tables)
     : Submap(transform::ToRigid3(proto.local_pose())),
@@ -93,6 +95,7 @@ Submap2D::Submap2D(const proto::Submap2D& proto,
   set_insertion_finished(proto.finished());
 }
 
+// 转换到Proto
 proto::Submap Submap2D::ToProto(const bool include_grid_data) const {
   proto::Submap proto;
   auto* const submap_2d = proto.mutable_submap_2d();
@@ -106,6 +109,7 @@ proto::Submap Submap2D::ToProto(const bool include_grid_data) const {
   return proto;
 }
 
+// 从proto流中更新
 void Submap2D::UpdateFromProto(const proto::Submap& proto) {
   CHECK(proto.has_submap_2d());
   const auto& submap_2d = proto.submap_2d();
@@ -124,6 +128,7 @@ void Submap2D::UpdateFromProto(const proto::Submap& proto) {
   }
 }
 
+// 转换到proto请求
 void Submap2D::ToResponseProto(
     const transform::Rigid3d&,
     proto::SubmapQuery::Response* const response) const {
@@ -134,6 +139,7 @@ void Submap2D::ToResponseProto(
   grid()->DrawToSubmapTexture(texture, local_pose());
 }
 
+// 插入一帧扫描数据，本质上就是简单调用了一下插入器的Insert方法而已，在更新一下相关成员
 void Submap2D::InsertRangeData(
     const sensor::RangeData& range_data,
     const RangeDataInserterInterface* range_data_inserter) {
@@ -143,6 +149,8 @@ void Submap2D::InsertRangeData(
   set_num_range_data(num_range_data() + 1);
 }
 
+// 标记一个Submap为结束，对grid_成员调用了ComputeCroppedGrid，相当于裁剪出了包含有效激光数据的区域
+// 然后调用父类的set_insertion_finished，标记子地图状态为完成
 void Submap2D::Finish() {
   CHECK(grid_);
   CHECK(!insertion_finished());
@@ -150,14 +158,29 @@ void Submap2D::Finish() {
   set_insertion_finished(true);
 }
 
+// ------------------  以下是 ActiveSubmaps2D 的内容---------------------------
+
+// 构造函数，重点在于调用CreateRangeDataInserter方法创建激光帧插入器
 ActiveSubmaps2D::ActiveSubmaps2D(const proto::SubmapsOptions2D& options)
     : options_(options), range_data_inserter_(CreateRangeDataInserter()) {}
 
+// 返回submaps
 std::vector<std::shared_ptr<const Submap2D>> ActiveSubmaps2D::submaps() const {
   return std::vector<std::shared_ptr<const Submap2D>>(submaps_.begin(),
                                                       submaps_.end());
 }
 
+/*
+ * 插入一帧扫描数据：
+ * 如果目前没有任何子地图，或者新图已经半满了，那么就新建一个子地图
+ * 新建的子地图以淡然range_data的原点作为自己的中心，以默认的大小进行扩展
+ * 注意Add操作会自动删除旧图，以限制所有图不超过两个
+ * 旧图是front，新图是back
+ * 如果旧图全满，则标记完结
+ * 对新图旧图都插入激光帧，方法就是调用子地图的InsertRangeData
+ * num_range_data这个配置参数表示的是子地图的半满值，全满是两倍的值，全满以后才会标记完结不再更新
+ * 注意：新建子地图的操作就发生在这个函数中
+ */
 std::vector<std::shared_ptr<const Submap2D>> ActiveSubmaps2D::InsertRangeData(
     const sensor::RangeData& range_data) {
   if (submaps_.empty() ||
@@ -173,6 +196,8 @@ std::vector<std::shared_ptr<const Submap2D>> ActiveSubmaps2D::InsertRangeData(
   return submaps();
 }
 
+// 根据配置参数去构造一个激光帧插入器
+// 对于概率栅格的情况，仅仅构造一个ProbabilityGridRangeDataInserter2D对象而已
 std::unique_ptr<RangeDataInserterInterface>
 ActiveSubmaps2D::CreateRangeDataInserter() {
   switch (options_.range_data_inserter_options().range_data_inserter_type()) {
@@ -189,12 +214,28 @@ ActiveSubmaps2D::CreateRangeDataInserter() {
   }
 }
 
+/*
+ * 创建一个网格
+ * 对于概率栅格的情况，仅仅创建一个ProbabilityGrid对象，
+ * 其中最主要的数据是MapLimits对象，成员包括
+ *  - resolution_（分辨率）, 
+ *  - max_(x和y方向上的最大长度，单位米), 
+ *  - cell_limits_(x和y方向的网格数量)
+ * 为什么max_里面跟原点有关系？？？？？
+ * public的接口只有Insert和submaps，前者调用了Add，Add里面调用了Create，这个是唯一的调用路径
+ * 
+ */
 std::unique_ptr<GridInterface> ActiveSubmaps2D::CreateGrid(
     const Eigen::Vector2f& origin) {
+  // 初始的栅格地图大小是100格*100格
   constexpr int kInitialSubmapSize = 100;
+  // 分辨率从配置参数中获得
   float resolution = options_.grid_options_2d().resolution();
+  // 根据配置参数中的网格类型分别处理
   switch (options_.grid_options_2d().grid_type()) {
+    // 我们只关注概率栅格
     case proto::GridOptions2D::PROBABILITY_GRID:
+      // 创建一个ProbabilityGrid对象，它接受一个MapLimits参数和一个查找表
       return absl::make_unique<ProbabilityGrid>(
           MapLimits(resolution,
                     origin.cast<double>() + 0.5 * kInitialSubmapSize *
@@ -202,6 +243,11 @@ std::unique_ptr<GridInterface> ActiveSubmaps2D::CreateGrid(
                                                 Eigen::Vector2d::Ones(),
                     CellLimits(kInitialSubmapSize, kInitialSubmapSize)),
           &conversion_tables_);
+    /*
+     * 最重要的就是这个MapLimits。可见创建的网格，初始大小是kInitialSubmapSize^2，即100^2，是一个正方形，分辨率由配置参数指定
+     * 它的max点是orgin加上一半的kInitialSubmapSize，所以实际上，是从origin为中心扩展开的，一个kInitialSubmapSize边长的正方形
+     * 这里重申一下：MapLimits没有原点，它的基准点就是max点，所有的坐标都是参考这个max点去计算的，详见它的定义
+     */
     case proto::GridOptions2D::TSDF:
       return absl::make_unique<TSDF2D>(
           MapLimits(resolution,
@@ -221,6 +267,13 @@ std::unique_ptr<GridInterface> ActiveSubmaps2D::CreateGrid(
   }
 }
 
+/*
+ * 添加子地图
+ * 需要参数origin，新地图以origin为中心，扩展成特定大小的栅格
+ * 如果目前的数目大于两个，就把front给删掉，所以submaps_的front是旧图，back是新图
+ * 老实说，这里不用数组，用队列更贴切
+ * Add操作隐含着删除旧图的操作，切记
+ */
 void ActiveSubmaps2D::AddSubmap(const Eigen::Vector2f& origin) {
   if (submaps_.size() >= 2) {
     // This will crop the finished Submap before inserting a new Submap to

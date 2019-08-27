@@ -28,15 +28,22 @@ namespace cartographer {
 namespace mapping {
 
 // Represents a 2D grid of probabilities.
+/*
+ * 概率栅格，从Grid2D派生出来的
+ */
 class ProbabilityGrid : public Grid2D {
  public:
+  // 从MapLimits中构造
   explicit ProbabilityGrid(const MapLimits& limits,
                            ValueConversionTables* conversion_tables);
+
+  // 从proto中构造
   explicit ProbabilityGrid(const proto::Grid2D& proto,
                            ValueConversionTables* conversion_tables);
 
   // Sets the probability of the cell at 'cell_index' to the given
   // 'probability'. Only allowed if the cell was unknown before.
+  // 给某个指定的栅格设置概率值
   void SetProbability(const Eigen::Array2i& cell_index,
                       const float probability);
 
@@ -47,16 +54,24 @@ class ProbabilityGrid : public Grid2D {
   //
   // If this is the first call to ApplyOdds() for the specified cell, its value
   // will be set to probability corresponding to 'odds'.
+  // 这个东西是干嘛的？“应用查找表”？实际上是用来更新网格的占率值用的
   bool ApplyLookupTable(const Eigen::Array2i& cell_index,
                         const std::vector<uint16>& table);
 
+  // 返回栅格类型，是一个枚举量
   GridType GetGridType() const override;
 
   // Returns the probability of the cell with 'cell_index'.
+  // 返回某个栅格的概率值
   float GetProbability(const Eigen::Array2i& cell_index) const;
 
+  // 转换到proto
   proto::Grid2D ToProto() const override;
+
+  // 生成一个包含所有有效数据的网格
   std::unique_ptr<Grid2D> ComputeCroppedGrid() const override;
+  
+  // 应该是用来回应某个service，此处略过
   bool DrawToSubmapTexture(
       proto::SubmapQuery::Response::SubmapTexture* const texture,
       transform::Rigid3d local_pose) const override;

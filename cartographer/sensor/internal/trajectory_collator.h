@@ -65,8 +65,10 @@ class TrajectoryCollator : public CollatorInterface {
       collator_metrics_family_;
 
   // Holds individual counters for each trajectory/sensor pair.
+  // 用来评估
   absl::flat_hash_map<std::string, metrics::Counter*> metrics_map_;
 
+  // 一个轨迹号对应一个Queue组，但感觉不太对，因为Queue组中的索引就包含了轨迹号啊
   absl::flat_hash_map<int, OrderedMultiQueue> trajectory_to_queue_;
 
   // Map of trajectory ID to all associated QueueKeys.

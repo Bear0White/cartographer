@@ -23,6 +23,18 @@
 namespace cartographer {
 namespace sensor {
 
+/*
+ * Dispatchable类，从Data类中继承
+ * Data类定义了一个基础的传感器数据结构
+ *    构造函数：以一个传感器名称构造（注意此处的ID不是index)
+ *    方法：GetTime, GetSensorId, AddToTrajectoryBuilder
+ * Dispatchable类中也仅仅增加了一个模板类型DataType而已，这是最主要的区别
+ * 构造函数：string类型的sensor_id，一个DataType类型的数据对象
+ * 方法：GetTime：返回数据对象的时间戳
+ *      AddToTrajectoryBuilder：调用参数的AddSensorData方法而已
+ *      data：返回数据对象本体
+ * 概括：猜测这个东西就是用来记录一帧传感器数据用的，可以提供时间戳，数据内容，和加入到轨迹构建者中的途径
+ */
 template <typename DataType>
 class Dispatchable : public Data {
  public:
@@ -40,6 +52,9 @@ class Dispatchable : public Data {
   const DataType data_;
 };
 
+/*
+ * 创建一个Dispatchable对象的智能unique指针
+ */
 template <typename DataType>
 std::unique_ptr<Dispatchable<DataType>> MakeDispatchable(
     const std::string &sensor_id, const DataType &data) {

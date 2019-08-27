@@ -39,6 +39,7 @@ void Collator::FinishTrajectory(const int trajectory_id) {
   }
 }
 
+// 给某个轨迹号添加数据
 void Collator::AddSensorData(const int trajectory_id,
                              std::unique_ptr<Data> data) {
   QueueKey queue_key{trajectory_id, data->GetSensorId()};

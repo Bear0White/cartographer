@@ -73,6 +73,7 @@ void MaybeAddPureLocalizationTrimmer(
 
 }  // namespace
 
+// 配置参数格式转换：从lua到proto
 proto::MapBuilderOptions CreateMapBuilderOptions(
     common::LuaParameterDictionary* const parameter_dictionary) {
   proto::MapBuilderOptions options;
@@ -91,6 +92,12 @@ proto::MapBuilderOptions CreateMapBuilderOptions(
   return options;
 }
 
+/*
+ * 地图构建者的唯一构造函数：从配置参数中构造
+ * 操作很简单：
+ * 根据配置use_trajectory_builder_2d/3d 去初始化PoseGraph2D或3D对象给pose_graph_成员
+ * 根据配置collate_by_trajectory 去初始化TrajectoryCollator或Collator对象给sensor_collator_成员
+ */
 MapBuilder::MapBuilder(const proto::MapBuilderOptions& options)
     : options_(options), thread_pool_(options.num_background_threads()) {
   CHECK(options.use_trajectory_builder_2d() ^
@@ -116,11 +123,16 @@ MapBuilder::MapBuilder(const proto::MapBuilderOptions& options)
   }
 }
 
+/*
+ * 创建一条轨迹，返回轨迹号
+ */
 int MapBuilder::AddTrajectoryBuilder(
     const std::set<SensorId>& expected_sensor_ids,
     const proto::TrajectoryBuilderOptions& trajectory_options,
     LocalSlamResultCallback local_slam_result_callback) {
+  // 生成trajectory_id，trajectory_builders_存着所有的trajectory，它的size值作为新的trajectory
   const int trajectory_id = trajectory_builders_.size();
+  // 根据2D和3D的情况分别处理：
   if (options_.use_trajectory_builder_3d()) {
     std::unique_ptr<LocalTrajectoryBuilder3D> local_trajectory_builder;
     if (trajectory_options.has_trajectory_builder_3d_options()) {
@@ -137,24 +149,39 @@ int MapBuilder::AddTrajectoryBuilder(
             static_cast<PoseGraph3D*>(pose_graph_.get()),
             local_slam_result_callback)));
   } else {
+    // 在2D的情况下：
+    // 构造一个Local轨迹建立者，如果有配置参数的话，就用配置参数来生成。
+    // Local轨迹建立者是局部SLAM的最高层，包括了添加各种传感器，扫描匹配，插入扫描帧到子地图等操作
     std::unique_ptr<LocalTrajectoryBuilder2D> local_trajectory_builder;
     if (trajectory_options.has_trajectory_builder_2d_options()) {
       local_trajectory_builder = absl::make_unique<LocalTrajectoryBuilder2D>(
           trajectory_options.trajectory_builder_2d_options(),
           SelectRangeSensorIds(expected_sensor_ids));
     }
+
     DCHECK(dynamic_cast<PoseGraph2D*>(pose_graph_.get()));
+
+    // trajectory_builders_是一个TrajectoryBuilderInterface的数组，而CollatedTrajectoryBuilder就是从后者中继承来的
     trajectory_builders_.push_back(absl::make_unique<CollatedTrajectoryBuilder>(
         trajectory_options, sensor_collator_.get(), trajectory_id,
         expected_sensor_ids,
+        // 这个函数返回的是TrajectoryBuilderInterface指针
         CreateGlobalTrajectoryBuilder2D(
             std::move(local_trajectory_builder), trajectory_id,
             static_cast<PoseGraph2D*>(pose_graph_.get()),
             local_slam_result_callback)));
+    /*
+     * 从上面可以看出，先有一个Local轨迹建立者，然后用它来参与 CreateGlobalTrajectoryBuilder2D函数生成一个轨迹建立者的接口指针，
+     * 再用其创建一个Collated轨迹建立者，这个东西才压入到轨迹构建者数组中
+     * 所以说，最高层的轨迹建立者实际上是Collated轨迹建立者
+     */
   }
+  
+  // 也许添加纯定位剪枝：暂时不知道什么意思
   MaybeAddPureLocalizationTrimmer(trajectory_id, trajectory_options,
                                   pose_graph_.get());
-
+  
+  // 如果配置选项中有初始的轨迹点位姿，那么就让pose_graph_去设置初始的轨迹位姿
   if (trajectory_options.has_initial_trajectory_pose()) {
     const auto& initial_trajectory_pose =
         trajectory_options.initial_trajectory_pose();
@@ -163,6 +190,8 @@ int MapBuilder::AddTrajectoryBuilder(
         transform::ToRigid3(initial_trajectory_pose.relative_pose()),
         common::FromUniversal(initial_trajectory_pose.timestamp()));
   }
+
+  // 以下是用来更新all_trajectory_builder_options_，把目标轨迹的参数压入到其中去
   proto::TrajectoryBuilderOptionsWithSensorIds options_with_sensor_ids_proto;
   for (const auto& sensor_id : expected_sensor_ids) {
     *options_with_sensor_ids_proto.add_sensor_id() = ToProto(sensor_id);
@@ -171,9 +200,16 @@ int MapBuilder::AddTrajectoryBuilder(
       trajectory_options;
   all_trajectory_builder_options_.push_back(options_with_sensor_ids_proto);
   CHECK_EQ(trajectory_builders_.size(), all_trajectory_builder_options_.size());
+
   return trajectory_id;
 }
 
+/*
+ * 在反序列化时添加轨迹
+ * 仅仅用于LoadState，在加载状态时（即反序列化时),根据需要在相关队列中添加轨迹，暂不讨论
+ * 实际上有效操作，也仅仅是给trajectory_builders_压入一个空对象，然后更新all_trajectory_builder_options_
+ * 仅此而已
+ */
 int MapBuilder::AddTrajectoryForDeserialization(
     const proto::TrajectoryBuilderOptionsWithSensorIds&
         options_with_sensor_ids_proto) {
@@ -184,11 +220,21 @@ int MapBuilder::AddTrajectoryForDeserialization(
   return trajectory_id;
 }
 
+/*
+ * 标记某个轨迹是“结束”状态，即不再向它添加传感器数据
+ * 调用了sensor_collator_和pose_graph_的同名方法
+ * 这个操作同样来自于carto的服务
+ */
 void MapBuilder::FinishTrajectory(const int trajectory_id) {
   sensor_collator_->FinishTrajectory(trajectory_id);
   pose_graph_->FinishTrajectory(trajectory_id);
 }
 
+/*
+ * 把Submap数据转换到proto格式，用以回应对submap的请求服务
+ * 主要调用了pose_graph_的GetSubmapData和submap_data.submpa的ToResponseProto方法
+ * 如果出错则返回报错字符串
+ */
 std::string MapBuilder::SubmapToProto(
     const SubmapId& submap_id, proto::SubmapQuery::Response* const response) {
   if (submap_id.trajectory_id < 0 ||
@@ -208,12 +254,20 @@ std::string MapBuilder::SubmapToProto(
   return "";
 }
 
+/*
+ * 序列化建图状态到流中
+ * 主要使用了carto的io模块的内容，暂且不做研究
+ */
 void MapBuilder::SerializeState(bool include_unfinished_submaps,
                                 io::ProtoStreamWriterInterface* const writer) {
   io::WritePbStream(*pose_graph_, all_trajectory_builder_options_, writer,
                     include_unfinished_submaps);
 }
 
+/*
+ * 序列化建图状态到文件中
+ * 主要使用了carto的io模块的内容，暂且不做研究
+ */
 bool MapBuilder::SerializeStateToFile(bool include_unfinished_submaps,
                                       const std::string& filename) {
   io::ProtoStreamWriter writer(filename);
@@ -222,8 +276,16 @@ bool MapBuilder::SerializeStateToFile(bool include_unfinished_submaps,
   return (writer.Close());
 }
 
+/*
+ * 从流中加载整个建图状态
+ * （复原建图过程中的所有数据，而不仅仅是地图）
+ * 返回的是流中的轨迹号 -> 最终的轨迹号的映射
+ * 整个过程后续再读，序列化和反序列化一起读，但为什么这两者一个是io::WritePbStream封装好的，另一个却用长篇的函数去定义？
+ */
 std::map<int, int> MapBuilder::LoadState(
     io::ProtoStreamReaderInterface* const reader, bool load_frozen_state) {
+  
+  //反序列化读取工具
   io::ProtoStreamDeserializer deserializer(reader);
 
   // Create a copy of the pose_graph_proto, such that we can re-write the
@@ -232,6 +294,7 @@ std::map<int, int> MapBuilder::LoadState(
   const auto& all_builder_options_proto =
       deserializer.all_trajectory_builder_options();
 
+  //逐条trajectory恢复
   std::map<int, int> trajectory_remapping;
   for (int i = 0; i < pose_graph_proto.trajectory_size(); ++i) {
     auto& trajectory_proto = *pose_graph_proto.mutable_trajectory(i);
@@ -257,6 +320,7 @@ std::map<int, int> MapBuilder::LoadState(
         trajectory_remapping.at(constraint_proto.node_id().trajectory_id()));
   }
 
+  //恢复Submaps
   MapById<SubmapId, transform::Rigid3d> submap_poses;
   for (const proto::Trajectory& trajectory_proto :
        pose_graph_proto.trajectory()) {
@@ -268,6 +332,7 @@ std::map<int, int> MapBuilder::LoadState(
     }
   }
 
+  //恢复节点的pose
   MapById<NodeId, transform::Rigid3d> node_poses;
   for (const proto::Trajectory& trajectory_proto :
        pose_graph_proto.trajectory()) {
@@ -401,6 +466,11 @@ std::map<int, int> MapBuilder::LoadState(
   return trajectory_remapping;
 }
 
+/*
+ * 从文件中加载整个建图状态
+ * （复原建图过程中的所有数据，而不仅仅是地图）
+ * 主要步骤就是调用LoadState方法
+ */
 std::map<int, int> MapBuilder::LoadStateFromFile(
     const std::string& state_filename, const bool load_frozen_state) {
   const std::string suffix = ".pbstream";

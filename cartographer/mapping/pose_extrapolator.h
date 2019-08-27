@@ -32,6 +32,9 @@ namespace mapping {
 // Keep poses for a certain duration to estimate linear and angular velocity.
 // Uses the velocities to extrapolate motion. Uses IMU and/or odometry data if
 // available to improve the extrapolation.
+/*
+ * 估计一段时间内的线速度和角速度，以追踪位姿。会使用IMU和里程计数据（如果可用）
+ */
 class PoseExtrapolator {
  public:
   explicit PoseExtrapolator(common::Duration pose_queue_duration,
@@ -59,31 +62,48 @@ class PoseExtrapolator {
   Eigen::Quaterniond EstimateGravityOrientation(common::Time time);
 
  private:
+  // 从poses里面去估计速度
   void UpdateVelocitiesFromPoses();
+  // 过滤过期的Imu数据
   void TrimImuData();
+  // 过滤过期的里程计数据
   void TrimOdometryData();
+  // 更新IMU追踪者
   void AdvanceImuTracker(common::Time time, ImuTracker* imu_tracker) const;
+
   Eigen::Quaterniond ExtrapolateRotation(common::Time time,
                                          ImuTracker* imu_tracker) const;
   Eigen::Vector3d ExtrapolateTranslation(common::Time time);
 
   const common::Duration pose_queue_duration_;
+
+  // 带时间戳的位姿
   struct TimedPose {
     common::Time time;
     transform::Rigid3d pose;
   };
+  // 存储以往pose的队列
   std::deque<TimedPose> timed_pose_queue_;
+  // 从队列中推算出的当前的线速度和角速度
   Eigen::Vector3d linear_velocity_from_poses_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d angular_velocity_from_poses_ = Eigen::Vector3d::Zero();
 
+  // 应该是重力常数吧
   const double gravity_time_constant_;
+  // IMU数据的队列
   std::deque<sensor::ImuData> imu_data_;
+
+  // 以下分别是IMU追踪者，里程计追踪者，推算者
   std::unique_ptr<ImuTracker> imu_tracker_;
   std::unique_ptr<ImuTracker> odometry_imu_tracker_;
   std::unique_ptr<ImuTracker> extrapolation_imu_tracker_;
+  
+  // 缓存最近一次推算的位姿结果，便于多次查询
   TimedPose cached_extrapolated_pose_;
 
+  // 用来存储里程计数据的队列
   std::deque<sensor::OdometryData> odometry_data_;
+  // 从里程计队列中推算出的线速度和角速度
   Eigen::Vector3d linear_velocity_from_odometry_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d angular_velocity_from_odometry_ = Eigen::Vector3d::Zero();
 };

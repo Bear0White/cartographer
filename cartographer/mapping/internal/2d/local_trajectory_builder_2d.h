@@ -60,6 +60,7 @@ class LocalTrajectoryBuilder2D {
  public:
   /*
    * 插入结果，就是把一帧扫描数据插入到子地图当中。
+   * 与TrajectoryBuilderInterface中定义的InsertionResult相比，这里缺了一个NodeId.
    */
   struct InsertionResult {
     //Data, 节点上记录的数据，包括时间，重力方向角，经过滤波和重力校正的点云数据，在局部SLAM中的位姿【这个局部SLAM指的是什么？】
@@ -75,7 +76,7 @@ class LocalTrajectoryBuilder2D {
     common::Time time;
     transform::Rigid3d local_pose;
     sensor::RangeData range_data_in_local;
-    // 'nullptr' if dropped by the motion filter.
+    // 'nullptr' if dropped by the motion filter. 如果被motion filter过滤掉了则返回空
     std::unique_ptr<const InsertionResult> insertion_result;
   };
 
@@ -97,7 +98,6 @@ class LocalTrajectoryBuilder2D {
   // for 2D SLAM. `TimedPointCloudData::time` is when the last point in
   // `range_data` was acquired, `TimedPointCloudData::ranges` contains the
   // relative time of point with respect to `TimedPointCloudData::time`.
-
   /*
    * 添加一帧扫描数据，需要参数：
    * 传感器名称，和TimedPointCloudData类型的扫描数据
@@ -108,8 +108,10 @@ class LocalTrajectoryBuilder2D {
   std::unique_ptr<MatchingResult> AddRangeData(
       const std::string& sensor_id,
       const sensor::TimedPointCloudData& range_data);
+  
   //添加一帧IMU数据
   void AddImuData(const sensor::ImuData& imu_data);
+  
   // 添加一帧里程计数据
   void AddOdometryData(const sensor::OdometryData& odometry_data);
   
@@ -139,17 +141,25 @@ class LocalTrajectoryBuilder2D {
   // Lazily constructs a PoseExtrapolator.
   void InitializeExtrapolator(common::Time time);
 
+  // 配置参数
   const proto::LocalTrajectoryBuilderOptions2D options_;
+  // 已激活的子地图，内部包含两个子地图，可以完成插入扫描帧的操作
   ActiveSubmaps2D active_submaps_;
 
+  // 运动过滤器，在较短时间内发生的位姿变化较小的数据会被过滤掉
   MotionFilter motion_filter_;
+  
+  // 实时对应扫描匹配器：用滑动窗口实现粗匹配
   scan_matching::RealTimeCorrelativeScanMatcher2D
       real_time_correlative_scan_matcher_;
+  // Ceres扫描匹配器：用Ceres实现精准匹配
   scan_matching::CeresScanMatcher2D ceres_scan_matcher_;
 
+  //位姿推算器
   std::unique_ptr<PoseExtrapolator> extrapolator_;
 
   int num_accumulated_ = 0;
+  // 该轨迹上的累积数据[?]
   sensor::RangeData accumulated_range_data_;
 
   absl::optional<std::chrono::steady_clock::time_point> last_wall_time_;

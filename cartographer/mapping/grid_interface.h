@@ -20,6 +20,10 @@
 #include <memory>
 #include <utility>
 
+/*
+ * 作为一个抽象的接口类，但里面几乎没有任何东西
+ */
+
 namespace cartographer {
 namespace mapping {
 

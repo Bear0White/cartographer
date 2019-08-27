@@ -525,6 +525,12 @@ class MapById {
   static int GetIndex(const SubmapId& id) { return id.submap_index; }
 
   std::map<int, MapByIndex> trajectories_;
+
+  /*
+   * 思考：如果单纯地迭代数据，直接用一个{trajectory ID, other ID}结构体作为键值，数据为内容，放入容器中不就可以了么
+   * 只要定义好<操作，容器里面的条目都是按轨迹号为主次序，ID为副次序拍好的，不就可以依次迭代了么
+   * 用两层map的唯一好处就是方便分层次访问，应该仅此而已了
+   */
 };
 
 }  // namespace mapping

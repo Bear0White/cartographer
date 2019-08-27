@@ -55,22 +55,26 @@ void TrajectoryCollator::AddSensorData(const int trajectory_id,
       .Add(std::move(queue_key), std::move(data));
 }
 
+// 对所有的Queue组都执行Flush
 void TrajectoryCollator::Flush() {
   for (auto& it : trajectory_to_queue_) {
     it.second.Flush();
   }
 }
 
+// 返回了一个空的absl::optional<int>，感觉这是个半成品啊
 absl::optional<int> TrajectoryCollator::GetBlockingTrajectoryId() const {
   return absl::optional<int>();
 }
 
+// 暂时不讨论评估相关的内容
 void TrajectoryCollator::RegisterMetrics(
     metrics::FamilyFactory* family_factory) {
   collator_metrics_family_ = family_factory->NewCounterFamily(
       "collator_input_total", "Sensor data received");
 }
 
+// 暂时不讨论评估相关的内容
 metrics::Counter* TrajectoryCollator::GetOrCreateSensorMetric(
     const std::string& sensor_id, int trajectory_id) {
   const std::string trajectory_id_str = absl::StrCat(trajectory_id);

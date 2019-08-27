@@ -23,12 +23,18 @@
 
 namespace cartographer {
 
+// 这个应该是声明吧？如果没有包含它的h文件，下文中调用时找不到定义
 namespace mapping {
 class TrajectoryBuilderInterface;
 }
 
 namespace sensor {
 
+/*
+ * Data类定义了一个基础的传感器数据结构
+ * 构造函数：以一个传感器名称构造（注意此处的ID不是index)
+ * 方法：GetTime, GetSensorId, AddToTrajectoryBuilder
+ */
 class Data {
  public:
   explicit Data(const std::string &sensor_id) : sensor_id_(sensor_id) {}

@@ -61,10 +61,17 @@ PointCloud AdaptivelyVoxelFiltered(
   /*
    * 如果滤波后没有足够的点，则不断降低分辨率，直至为原分辨率的百分之一，以期可以获得更多的点
    * 具体的过程也很有趣，用了二分搜索(比较这里是浮点范围的搜索，没法直接用STL),来获得最佳分辨率
+   * -------
    * for high = ori_high; high > ori_high / 100; high /= 2.0:
    *    low = high / 2;
-   *    if filtered points at low is enough:
-   *      binary search in [low, high], from high side, until find one enougth
+   *    if 以low滤波后数量足够:
+   *      在范围[low, high]中从右向左搜索, 直到找到分辨率可以满足条件则更新结果，或者搜索到1.1*low处
+   *    返回结果
+   * 返回结果
+   * -------
+   * 整个搜索过程值得学习，比较不是从数组里面找到某个元素，离散的有穷的搜索空间可以用STL，这里是浮点，空间是连续无穷的
+   * 
+   * 不过话说回来，为什么不直接在[ori_high/100, ori_high]区间进行二分搜索？
    */
 
   // Search for a 'low_length' that is known to result in a sufficiently
@@ -99,6 +106,8 @@ PointCloud AdaptivelyVoxelFiltered(
 
 /*
  * Filter 方法，参数是PointCloud类型
+ * 过程很简单，对参数中所有的激光点做离散化，然后滤除过于靠近的点。
+ * 每个离散的位置处有一个点就够了，后续落在同一个离散位置的点统统过滤
  */
 PointCloud VoxelFilter::Filter(const PointCloud& point_cloud) {
   PointCloud results;
@@ -112,6 +121,10 @@ PointCloud VoxelFilter::Filter(const PointCloud& point_cloud) {
   return results;
 }
 
+/*
+ * Filter 方法，参数是TimedPointCloud类型
+ * 虽然参数类型不同，但是过程基本一致
+ */
 TimedPointCloud VoxelFilter::Filter(const TimedPointCloud& timed_point_cloud) {
   TimedPointCloud results;
   for (const TimedRangefinderPoint& point : timed_point_cloud) {
@@ -124,6 +137,10 @@ TimedPointCloud VoxelFilter::Filter(const TimedPointCloud& timed_point_cloud) {
   return results;
 }
 
+/*
+ * Filter 方法，参数是vector<TimedPointCloudOriginData::RangeMeasurement>类型
+ * 虽然参数类型不同，但是过程基本一致
+ */
 std::vector<TimedPointCloudOriginData::RangeMeasurement> VoxelFilter::Filter(
     const std::vector<TimedPointCloudOriginData::RangeMeasurement>&
         range_measurements) {
@@ -187,6 +204,7 @@ AdaptiveVoxelFilter::AdaptiveVoxelFilter(
  * 自适应体素滤波器中唯一的方法：Filter
  * 参数：PointCloud，点云，数据格式是激光点的数组
  * 内容：仅仅是调用AdaptivelyVoxelFiltered和FilterByMaxRange函数
+ * 后者会过滤超出范围的激光点，前者过滤空间中过于靠近的激光点，同时动态调节分辨率以满足最少点数目min_num_points的要求
  */
 PointCloud AdaptiveVoxelFilter::Filter(const PointCloud& point_cloud) const {
   return AdaptivelyVoxelFiltered(
