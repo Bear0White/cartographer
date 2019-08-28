@@ -63,6 +63,9 @@ void GrowAsNeeded(const sensor::RangeData& range_data,
  * - miss_table：用于对miss点进行数据更新的查找表
  * - insert_free_space：是否对miss点进行处理
  * - probability_grid: 概率栅格对象
+ * 从中可以看出论文中对栅格更新的过程：对某一个扫描帧，得到所有的hits点和miss点。
+ * 如果某个栅格属于miss点，则根据miss点更新规则，更新旧的数值，反之亦然。
+ * 那么如果一个点，上一次观测是hit，这一次是miss呢？本轮更新只考虑本轮的情况，上次的不管。
  */
 void CastRays(const sensor::RangeData& range_data,
               const std::vector<uint16>& hit_table,
