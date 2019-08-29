@@ -40,6 +40,15 @@ namespace mapping {
  * 如果还不能理解的话，可以认为观测值是控制量的反映，在控制量的作用下状态发生突变；否则状态会按之前的趋势推进下去
  */
 
+/*
+ * 位姿队列是最核心的数据体，大部分操作都是从位姿队列展开。位姿队列存储了每次迭代后计算出的位姿结果，同时会清理其中的过期数据。
+ * 新的位姿是在上次迭代产生的位姿(即位姿队列尾元素)基础上，结合从那时到此时的"IMU或里程计算出的位姿差量"，来计算新的位姿
+ * IMU追踪器里面维护了IMU的状态，核心状态就是姿态角。
+ * 但姿态角并不直接用来反映车体姿态，而是用两个时刻的姿态角的差值去反映车体在两时刻间的位姿差量
+ * 里程计没有追踪器去维护它的位姿状态，仅仅是从里程计数据中直接推算角速度和线速度而已，以此推算某不同时刻间的车体位姿差量
+ * 回过头来，看carto官方文档，它说imu坐标系和“tracking_frame"应该出在同一个位置，尽管可以有旋转变换。因为就是用imu的姿态来表征后者的姿态（变化量）的
+ */
+
 // 构造函数：仅仅完成成员的初始化而已
 PoseExtrapolator::PoseExtrapolator(const common::Duration pose_queue_duration,
                                    double imu_gravity_time_constant)
@@ -102,8 +111,8 @@ common::Time PoseExtrapolator::GetLastExtrapolatedTime() const {
  * 内部会：
  * - 构造IMU追踪者(如果之前没有)，
  * - 用imu_data_更新imu追踪器，
- * - 清理过期的IMU和里程计数据，
- * - 构建里程计追踪者和推进器追踪者
+ * - 清理过期的IMU和里程计数据
+ * - 更新里程计追踪者和推进器追踪者，这两个东西是用来保存IMU的临时状态的
  */
 void PoseExtrapolator::AddPose(const common::Time time,
                                const transform::Rigid3d& pose) {
@@ -187,7 +196,8 @@ void PoseExtrapolator::AddOdometryData(
       ExtrapolateRotation(odometry_data_newest.time,
                           odometry_imu_tracker_.get());
       // odometry_imu_tracker_是在添加位姿队列的函数中更新的，它的时刻和位姿队列最后一个元素的时间是一样的，
-      // 所以得到的就是newest.time时，里程计所在坐标系的方向角
+      // 所以Extra...函数返回的是位姿队列末尾时刻到odometry_data_newest.time时刻，IMU的姿态变换差量，由于IMU固定在车体上，所以也是车体的姿态差量
+      // 位姿队列末尾元素乘以这个差量，就是odometry_data_newest.time时刻车体的姿态.
   linear_velocity_from_odometry_ =
       orientation_at_newest_odometry_time *
       linear_velocity_in_tracking_frame_at_newest_odometry_time;
@@ -204,8 +214,11 @@ transform::Rigid3d PoseExtrapolator::ExtrapolatePose(const common::Time time) {
     //下面的Extra...函数，计算从位姿队列最后一个时间戳到指定时刻，按系统线速度应该运动的平移量
     const Eigen::Vector3d translation =
         ExtrapolateTranslation(time) + newest_timed_pose.pose.translation();
-    //下面的Extra...函数，计算IMU更新到指定时刻的位姿，与extr...的位姿的旋转差值。
-    // 注意每次往位姿队列添加元素时都会更新extra..,所以里面保存的状态，恰好对应位姿队列中最后一个元素
+    // 下面的Extra...函数，计算IMU推算到指定时刻的位姿，与extr...的位姿的旋转差值。
+    // 注意每次往位姿队列添加元素时都会更新extra..,所以里面保存的状态，恰好对应位姿队列中最后一个元素添加时，IMU的状态
+    // 所以可以解释为：Extra...函数返回的是两个IMU状态的旋转量差值，从extra...的状态，与time时刻的IMU状态的差值。
+    // 而前者存储了位姿队列末尾元素的时刻点的IMU状态，就说说Extra函数返回的是IMU从位姿队列末尾时刻到time时刻的旋转变换
+    // 假设从位姿队列末尾时刻到time时刻，IMU旋转了某个角度；那么time时刻的位姿，就是那个时刻的位姿应用这个角度变换即可
     // [ 为什么这个相乘的顺序那么别扭呢？不应该是后面乘前面吗？]
     const Eigen::Quaterniond rotation =
         newest_timed_pose.pose.rotation() *
@@ -350,14 +363,9 @@ void PoseExtrapolator::AdvanceImuTracker(const common::Time time,
 //-----------------------------------------------------------------------------------------------------//
 
 // 返回成员IMU更新到指定时间点时的位姿，与指定的参数IMU追踪者的位姿，两者的旋转差值。使用到了成员IMU
-// 调用的时候都是这样的：
-// timed_pose_queue_.back().pose.rotation() *
-//    ExtrapolateRotation(time, xxx_tracker_.get());
-// 感觉是虽然在位姿队列尾部元素旋转量的基础上，再做一个旋转变换，得到时刻time点的旋转量。xxx_tarcker要么是odomxxx要么是extrapolateImuxxx
-// 它们仅仅在添加位姿队列数据时被更新，所以保存的状态对应位姿队列尾部元素时间戳是一样的
-// 所以结果就是：从位姿队列尾部的时间点开始，更新到time，发生的旋转变换？？？？？？？？
-// 虽然从数学上，感觉相乘顺序是不是反了？
-//
+// 一个imu_tracker里面维护了一个IMU的状态量，所以最终返回的是两个IMU状态的差值
+// 而在调用的时候，参数imu_tracker_ 要么是extrapolation_imu_tracker_，要么是odometry_tracker_, 这两个东西其实是记录了本体IMU在某个时刻的状态
+// 所以求解的其实是本体IMU在不同时刻的位姿差值而已，因为IMU是固定在车体上的，所以也反映了车体在不同时刻的位姿差值，这最好在具体场合中去理解
 Eigen::Quaterniond PoseExtrapolator::ExtrapolateRotation(
     const common::Time time, ImuTracker* const imu_tracker) const {
   CHECK_GE(time, imu_tracker->time());
