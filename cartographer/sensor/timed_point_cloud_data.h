@@ -44,6 +44,7 @@ struct TimedPointCloudData {
  * 也就是说，一组扫描数据有N个，那么就有N个激光点数据，N个扫描时间点数据，N个雷达本体的位姿数据
  * 所以可以解释为：time是整个结构体的基准时间，猜测是最后一个扫描点的捕获时间；origins是N个扫描点被捕获时的雷达本体位姿；
  * ranges是每次扫描的数据，包括扫描到的激光点数据（包括捕获到的时间）以及此时的雷达位置index
+ * [不对，似乎不是这样的，不是用于旋转式雷达的，可以参考range_data_collator里面的函数]
  */
 struct TimedPointCloudOriginData {
   struct RangeMeasurement {

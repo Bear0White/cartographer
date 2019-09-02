@@ -134,11 +134,13 @@ class LocalTrajectoryBuilder2D {
 
   // Scan matches 'filtered_gravity_aligned_point_cloud' and returns the
   // observed pose, or nullptr on failure.
+  // 前端的扫描匹配的最高层调用
   std::unique_ptr<transform::Rigid2d> ScanMatch(
       common::Time time, const transform::Rigid2d& pose_prediction,
       const sensor::PointCloud& filtered_gravity_aligned_point_cloud);
 
   // Lazily constructs a PoseExtrapolator.
+  // 初始化推算器（如果推算器不存在)
   void InitializeExtrapolator(common::Time time);
 
   // 配置参数

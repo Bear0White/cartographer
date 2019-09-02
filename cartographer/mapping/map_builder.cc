@@ -124,7 +124,7 @@ MapBuilder::MapBuilder(const proto::MapBuilderOptions& options)
 }
 
 /*
- * 创建一条轨迹，返回轨迹号
+ * 创建一条轨迹，返回轨迹号，这里面会创建“轨迹建立者”
  */
 int MapBuilder::AddTrajectoryBuilder(
     const std::set<SensorId>& expected_sensor_ids,
