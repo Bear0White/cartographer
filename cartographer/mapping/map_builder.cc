@@ -41,6 +41,7 @@ namespace {
 
 using mapping::proto::SerializedData;
 
+// 挑选激光类型的传感器ID
 std::vector<std::string> SelectRangeSensorIds(
     const std::set<MapBuilder::SensorId>& expected_sensor_ids) {
   std::vector<std::string> range_sensor_ids;
@@ -96,7 +97,7 @@ proto::MapBuilderOptions CreateMapBuilderOptions(
  * 地图构建者的唯一构造函数：从配置参数中构造
  * 操作很简单：
  * 根据配置use_trajectory_builder_2d/3d 去初始化PoseGraph2D或3D对象给pose_graph_成员
- * 根据配置collate_by_trajectory 去初始化TrajectoryCollator或Collator对象给sensor_collator_成员
+ * 根据配置collate_by_trajectory 去初始化sensor_collator_成员：TrajectoryCollator或Collator对象中的一个
  */
 MapBuilder::MapBuilder(const proto::MapBuilderOptions& options)
     : options_(options), thread_pool_(options.num_background_threads()) {
@@ -125,8 +126,10 @@ MapBuilder::MapBuilder(const proto::MapBuilderOptions& options)
 
 /*
  * 创建一条轨迹，返回轨迹号，这里面会创建“轨迹建立者”
+ * 这是整个类中算法层面上最核心的方法
  */
 int MapBuilder::AddTrajectoryBuilder(
+   // 参数：期望的传感器ID集合，相关配置参数，回调函数
     const std::set<SensorId>& expected_sensor_ids,
     const proto::TrajectoryBuilderOptions& trajectory_options,
     LocalSlamResultCallback local_slam_result_callback) {
@@ -151,11 +154,12 @@ int MapBuilder::AddTrajectoryBuilder(
   } else {
     // 在2D的情况下：
     // 构造一个Local轨迹建立者，如果有配置参数的话，就用配置参数来生成。
-    // Local轨迹建立者是局部SLAM的最高层，包括了添加各种传感器，扫描匹配，插入扫描帧到子地图等操作
+    // Local轨迹建立者是局部SLAM的最高层，包括了添加各种传感器数据，扫描匹配，插入扫描帧到子地图等操作
     std::unique_ptr<LocalTrajectoryBuilder2D> local_trajectory_builder;
     if (trajectory_options.has_trajectory_builder_2d_options()) {
       local_trajectory_builder = absl::make_unique<LocalTrajectoryBuilder2D>(
           trajectory_options.trajectory_builder_2d_options(),
+          // 以下函数挑选出激光类型的传感器
           SelectRangeSensorIds(expected_sensor_ids));
     }
 
@@ -191,7 +195,7 @@ int MapBuilder::AddTrajectoryBuilder(
         common::FromUniversal(initial_trajectory_pose.timestamp()));
   }
 
-  // 以下是用来更新all_trajectory_builder_options_，把目标轨迹的参数压入到其中去
+  // 以下是用来更新all_trajectory_builder_options_，把目标轨迹的配置参数压入到其中去
   proto::TrajectoryBuilderOptionsWithSensorIds options_with_sensor_ids_proto;
   for (const auto& sensor_id : expected_sensor_ids) {
     *options_with_sensor_ids_proto.add_sensor_id() = ToProto(sensor_id);

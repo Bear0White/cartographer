@@ -35,26 +35,40 @@ namespace sensor {
 // Also contrary to 'Collator', whose output is deterministic, the sequence in
 // which data is dispatched is not sorted, so non-deterministic input sequences
 // will result in non-deterministic output.
+/*
+ * 建议和Collator类放在一起看，两者都是从接口类继承下来的，核心都是OrderedMultiQueue
+ *      OrderedMultiQueue是多个传感器数据队列，由一个QueueKey索引，里面包括轨迹号和传感器ID
+ *      方法包括添加队列，向队列添加数据，冲水等操作
+ * 此类和Collator不同的是，后者用了OrderedMultiQueue类型的成员queue_,但是这里是哈希<int, OrderedMultiQueue> trajectory_to_queue_
+ * 尽管在我看来，必要性并不大，因为QueueKey里面就已经有了轨迹号，相当于是两层哈希，仅仅提高了根据轨迹号索引所有队列的效率，仅此而已
+ * 功能上，和Collator并没有什么区别
+ */
 class TrajectoryCollator : public CollatorInterface {
  public:
   TrajectoryCollator() {}
 
   TrajectoryCollator(const TrajectoryCollator&) = delete;
   TrajectoryCollator& operator=(const TrajectoryCollator&) = delete;
-
+   
+  // 根据轨迹号和传感器ID集合，添加所有的传感器数据队列
   void AddTrajectory(
       int trajectory_id,
       const absl::flat_hash_set<std::string>& expected_sensor_ids,
       const Callback& callback) override;
 
+  // 给指定ID号下的所有传感器队列都标记为Finished
   void FinishTrajectory(int trajectory_id) override;
 
+  // 给指定队列和传感器ID(从data中得到)下的队列添加数据，注意此后会触发派发操作
   void AddSensorData(int trajectory_id, std::unique_ptr<Data> data) override;
-
+  
+  // 对所有的Queue组都执行Flush，此举会标记所有队列为Finish，并派发所有数据
   void Flush() override;
 
+  // 半成品，返回空对象
   absl::optional<int> GetBlockingTrajectoryId() const override;
 
+  // 评估用
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
  private:
@@ -68,10 +82,12 @@ class TrajectoryCollator : public CollatorInterface {
   // 用来评估
   absl::flat_hash_map<std::string, metrics::Counter*> metrics_map_;
 
-  // 一个轨迹号对应一个Queue组，但感觉不太对，因为Queue组中的索引就包含了轨迹号啊
+  // 整个数据主体
+  // 一个轨迹号对应一个OrderedMultiQueue，但感觉不必要，因为后者中的索引就包含了轨迹号
   absl::flat_hash_map<int, OrderedMultiQueue> trajectory_to_queue_;
 
   // Map of trajectory ID to all associated QueueKeys.
+  // 记录轨迹号与QueueKey队列的Map
   absl::flat_hash_map<int, std::vector<QueueKey>> trajectory_to_queue_keys_;
 };
 

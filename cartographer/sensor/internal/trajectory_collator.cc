@@ -21,10 +21,12 @@
 namespace cartographer {
 namespace sensor {
 
+// 应该是评估用
 metrics::Family<metrics::Counter>*
     TrajectoryCollator::collator_metrics_family_ =
         metrics::Family<metrics::Counter>::Null();
 
+// 根据轨迹号和传感器ID集合，添加所有的传感器数据队列
 void TrajectoryCollator::AddTrajectory(
     const int trajectory_id,
     const absl::flat_hash_set<std::string>& expected_sensor_ids,
@@ -40,12 +42,14 @@ void TrajectoryCollator::AddTrajectory(
   }
 }
 
+// 给指定ID号下的所有传感器队列都标记为Finished
 void TrajectoryCollator::FinishTrajectory(const int trajectory_id) {
   for (const auto& queue_key : trajectory_to_queue_keys_[trajectory_id]) {
     trajectory_to_queue_.at(trajectory_id).MarkQueueAsFinished(queue_key);
   }
 }
 
+// 给指定队列和传感器ID下的队列添加数据，注意此后会触发派发操作
 void TrajectoryCollator::AddSensorData(const int trajectory_id,
                                        std::unique_ptr<Data> data) {
   QueueKey queue_key{trajectory_id, data->GetSensorId()};
@@ -55,7 +59,7 @@ void TrajectoryCollator::AddSensorData(const int trajectory_id,
       .Add(std::move(queue_key), std::move(data));
 }
 
-// 对所有的Queue组都执行Flush
+// 对所有的Queue组都执行Flush，此举会标记所有队列为Finish，并派发所有数据
 void TrajectoryCollator::Flush() {
   for (auto& it : trajectory_to_queue_) {
     it.second.Flush();

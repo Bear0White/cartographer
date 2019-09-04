@@ -45,8 +45,22 @@ struct QueueKey {
 };
 
 /*
- * 这个东西叫做有序多个队列，显然应该是多个queue，每个queue都由一个QueueKey来索引，即，一个轨迹号和一个传感器名称可以唯一指定一个queue
- * 从后续的函数可以看出，每个queue中保存了多个传感器数据，传感器数据也是有序的，排序的方式应该是时间
+ * 这个东西叫做有序多个队列，显然应该是多个queue，每个queue都由一个QueueKey来索引。即，一个轨迹号和一个传感器名称可以唯一指定一个queue
+ * 整个数据本体是一个哈希，从 QueueKey-> queue
+ * 从后续的函数可以看出，每个queue中保存了一组传感器数据，传感器数据也是有序的，排序的方式是时间
+ * 它的意义在于整合多个传感器数据队列
+ * 构造：默认构造函数
+ * 方法：
+ *  AddQueue 添加一个queue
+ *  MarkQueuAsFinished 把一个queue标记为完成，然后执行派发操作
+ *  Add 对某个queue添加数据，然后执行派发操作
+ *  Flush 把所有Queue标记为完成，然后执行派发操作
+ *  GetBlocker 返回当前阻塞派发的队列
+ * 关于派发操作：
+ *   派发操作就是从所有的数据队列中，一个一个取出最旧的数据，弹出并用回调函数做处理，直到某个数据队列为空，或其他阻塞情况为止。
+ *   派发操作时，如果某队列标记为Finish，则意味着不再有新数据添加到队列中，可以放心大胆地弹出数据做处理，甚至直接删除整个队列。
+ *   派发操作还会关注某个轨迹号下所有队列的公共起始时间，这个时间指的是所有队列首元素最大时间戳。如果有数据远远旧于这个时间，则直接丢弃。
+ *   具体还有很多细节。
  */
 
 // Maintains multiple queues of sorted sensor data and dispatches it in merge
@@ -75,7 +89,7 @@ class OrderedMultiQueue {
 
   // Adds 'data' to a queue with the given 'queue_key'. Data must be added
   // sorted per queue.
-  // 对某个指定的Queue添加数据
+  // 对某个指定的Queue添加数据，再执行Dispatch
   void Add(const QueueKey& queue_key, std::unique_ptr<Data> data);
 
   // Dispatches all remaining values in sorted order and removes the underlying
@@ -107,7 +121,7 @@ class OrderedMultiQueue {
   //仅仅用在GetCommonStartTime中，用于记录查找结果，避免重复查找
   std::map<int, common::Time> common_start_time_per_trajectory_;
 
-  // 整个队列的本体
+  // 整个数据的本体
   std::map<QueueKey, Queue> queues_;
   QueueKey blocker_;
 };

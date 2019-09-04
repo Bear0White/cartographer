@@ -32,6 +32,7 @@ class OrderedMultiQueueTest : public ::testing::Test {
   const QueueKey kSecond{1, "b"};
   const QueueKey kThird{2, "b"};
 
+  // 给queue_添加三个queue，每个queue的回调函数，都是把指定参数压入value_中
   void SetUp() {
     for (const auto& queue_key : {kFirst, kSecond, kThird}) {
       queue_.AddQueue(queue_key, [this](std::unique_ptr<Data> data) {
@@ -43,6 +44,7 @@ class OrderedMultiQueueTest : public ::testing::Test {
     }
   }
 
+  //制造一个IMU数据，时间戳就是参数
   std::unique_ptr<Data> MakeImu(const int ordinal) {
     return MakeDispatchable(
         "imu", ImuData{common::FromUniversal(ordinal), Eigen::Vector3d::Zero(),

@@ -46,7 +46,7 @@ OrderedMultiQueue::~OrderedMultiQueue() {
   }
 }
 
-// 添加一个queue，仅仅是在queues_里面添加了新元素并初始化了callback而已
+// 添加一个queue，仅仅是在queues_里面添加了空元素并初始化了它的callback而已
 void OrderedMultiQueue::AddQueue(const QueueKey& queue_key, Callback callback) {
   CHECK_EQ(queues_.count(queue_key), 0);
   queues_[queue_key].callback = std::move(callback);
@@ -76,7 +76,7 @@ void OrderedMultiQueue::Add(const QueueKey& queue_key,
   Dispatch();
 }
 
-// 遍历所有的Queue，把所有未完成的Queue使用MarkQueueAsFinished标记成完成并调用Dispatch
+// 遍历所有的Queue，把所有未完成的Queue使用MarkQueueAsFinished标记成完成并调用Dispatch，此举会清理掉所有数据
 void OrderedMultiQueue::Flush() {
   std::vector<QueueKey> unfinished_queues;
   for (auto& entry : queues_) {
@@ -95,12 +95,19 @@ QueueKey OrderedMultiQueue::GetBlocker() const {
   return blocker_;
 }
 
+/*
+ * 最难搞的一个函数了
+ * 最外层是一个while，不断循环：每次循环都找到所有队列中，首元素时间戳最小的那个元素，尝试弹出并用回调函数处理；
+ * 直到遇见某个队列为空，或其他阻塞情况为止。
+ * 其中会调用GetCommonStartTime，使用的场景看，应该是某个轨迹下所有队列都有数据后，所有首元素的最大时间戳。只会计算一次，随后用查表来得到。
+ * 阻塞情况请查看具体实现。
+ */
 void OrderedMultiQueue::Dispatch() {
   while (true) {
     const Data* next_data = nullptr;
     Queue* next_queue = nullptr;
     QueueKey next_queue_key;
-    // 遍历所有的Queue
+    // 遍历所有的Queue，如果遇见未Finish的空队列，就会终止函数。同时会查找首元素时间戳最小者，记作next_data
     for (auto it = queues_.begin(); it != queues_.end();) {
       // 尝试取出Queue的头部元素
       const auto* data = it->second.queue.Peek<Data>();
@@ -111,7 +118,7 @@ void OrderedMultiQueue::Dispatch() {
           queues_.erase(it++); //这样做不太好，似乎迭代器会失效？
           continue;
         }
-        // 如果Queue没有标记为结束，则把这个Queue的键存入blocker_中并从整个函数中返回
+        // 如果Queue没有标记为结束，则把这个Queue的键存入blocker_中并从整个函数中返回，视作阻塞情况
         // 所以，如果发现有空的Queue却没有标记结束，则保存在blocker_并结束整个函数，注意是整个函数
         CannotMakeProgress(it->first);
         return;
@@ -134,26 +141,35 @@ void OrderedMultiQueue::Dispatch() {
 
     // If we haven't dispatched any data for this trajectory yet, fast forward
     // all queues of this trajectory until a common start time has been reached.
-    // 根据GetCommonStartTime函数的阅读结果，整个函数返回的是这个轨迹号下第一条添加的数据的时间戳
+    // GetCom...返回的是这个轨迹号下所有队列首元素最大时间戳。根据上文流程，如果有队列为空则函数会终止，所以走到这一步，一定是所有队列都有数据
+    // 注意：这个数值仅在初始化阶段才计算一次，以后就直接查表。这意味着整个过程中值是唯一的
     const common::Time common_start_time =
         GetCommonStartTime(next_queue_key.trajectory_id);
-
+    
+    // 下面是对next_data进行处理，它是所有队列的时间戳最小者，即最旧的数据。绝大部分都会进入第一个条件分支，弹出元素并用回调函数处理。
+    // 其他两个分支，即数据旧于公共时间点，要么阻塞，要么直接丢弃，仅在某些情况下才用回调函数处理。
     if (next_data->GetTime() >= common_start_time) {
       // Happy case, we are beyond the 'common_start_time' already.
       last_dispatched_time_ = next_data->GetTime();
+      // 弹出元素，并用回调函数做处理
       next_queue->callback(next_queue->queue.Pop());
     } else if (next_queue->queue.Size() < 2) {
+      // 如果元素不足两个，又没有标记结束，则不能判断是否该丢弃，大概是因为整个算法在计算时，有的数据至少要保留两条，如从里程计数据估计速度的情况
+      // 在此处阻塞，终止函数，并保存阻塞项
       if (!next_queue->finished) {
         // We cannot decide whether to drop or dispatch this yet.
         CannotMakeProgress(next_queue_key);
         return;
       }
+      // 如果标记结束了，则可以高高兴兴地弹出元素并用回调函数做处理
       last_dispatched_time_ = next_data->GetTime();
       next_queue->callback(next_queue->queue.Pop());
     } else {
       // We take a peek at the time after next data. If it also is not beyond
       // 'common_start_time' we drop 'next_data', otherwise we just found the
       // first packet to dispatch from this queue.
+      // 目标数据在指定时间点之前，而且目标后面的数据依然在指定时间点之前，那么就弹出目标数据，不做任何处理；
+      //                         如果目标后面的数据在指定时间点之后，那么就弹出目标数据并用回调函数处理
       std::unique_ptr<Data> next_data_owner = next_queue->queue.Pop();
       if (next_queue->queue.Peek<Data>()->GetTime() > common_start_time) {
         last_dispatched_time_ = next_data->GetTime();
@@ -178,19 +194,21 @@ void OrderedMultiQueue::CannotMakeProgress(const QueueKey& queue_key) {
  * 查找某个轨迹号的公用起始时间，毕竟一个轨迹号可以有很多传感器的队列
  * 核心用到了common_start_time_per_trajectory_成员，这个东西就是用来记录查找结果的，避免重复查找
  * 首先看看有没有记录，有的话直接返回；如果没有，则插入一条记录，并且寻找该轨迹号的所有Queue，把头部元素时间戳最大者作为结果返回，并更新这个记录
- * 简单来说，返回所有该轨迹号下的Queue中队首元素最大的时间戳
- * [如果某个记录一旦插入，则对该轨迹号的任何查找都会直接返回该条记录，如果队列更新了怎么办？]
- * [在每次Dispatch就会调用此函数，而每次Add添加数据都会Dispatch，就是说某个轨迹号的第一条数据添加后，就会调用此函数，
- *  会得到第一条数据的时间戳，然后轨迹号的commontime不就确定了不再改变了么]
+ * 简单来说，返回所有该轨迹号下的所有Queue中，队首元素最大的时间戳
+ * [如果某个记录一旦插入，则对该轨迹号的任何查找都会直接返回该条记录，如果队列更新了怎么办？也就是说这个函数只在最初时刻才运作，之后就是查表而已]
+ * [这个函数只在Dispatch调用，而流程中，只有所有queue都有数据时，才会调用。
+ * 所以函数的本意是：在初始阶段，某个轨迹号下所有传感器队列都有数据后，查找所有首元素时间戳最大者。
+ * 物理意义就是，这个时刻之后，所有传感器队列都有数据了（当然啦，carto认为传感器数据都是周期性连贯的）。所以叫做公共起始时间
+ * ]
  */
 common::Time OrderedMultiQueue::GetCommonStartTime(const int trajectory_id) {
-  // 成员common_start_time_per_trajectory_仅仅在这个函数中有用到
+  // 成员common_start_time_per_trajectory_仅仅在这个函数中有用到，是用来记录查找结果的，避免重复查找
   auto emplace_result = common_start_time_per_trajectory_.emplace(
       trajectory_id, common::Time::min());
   // emplace函数原型是这样的：pair<iterator,bool> emplace (Args&&... args);
   // 返回的是迭代器和bool的一个pair，如果插入成功，则返回新元素的迭代器和true；否则返回已存在的元素的迭代器和false
   common::Time& common_start_time = emplace_result.first->second;
-  // 如果插入成功了，则找到所有Queues中队首元素时间最大者，作为common_start_time返回
+  // 如果插入成功了，则原先记录表里面是没有这项的：找到该轨迹号下所有Queues中队首元素时间最大者，作为common_start_time返回
   if (emplace_result.second) {
     for (auto& entry : queues_) {
       if (entry.first.trajectory_id == trajectory_id) {

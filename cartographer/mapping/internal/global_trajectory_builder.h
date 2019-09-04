@@ -30,6 +30,12 @@
 namespace cartographer {
 namespace mapping {
 
+/*
+ * 这个文件是关于GlobalTrajectoryBuilder类，继承于TrajectoryBuilderInterface
+ * 公开的方法，最核心的只有一个：
+ * CreateGlobalTrajectoryBuilder2D, 它用隐式的方法完成构造，返回一个智能指针
+ */
+
 std::unique_ptr<TrajectoryBuilderInterface> CreateGlobalTrajectoryBuilder2D(
     std::unique_ptr<LocalTrajectoryBuilder2D> local_trajectory_builder,
     const int trajectory_id, mapping::PoseGraph2D* const pose_graph,

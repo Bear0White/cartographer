@@ -31,9 +31,12 @@ class TrajectoryBuilderInterface;
 namespace sensor {
 
 /*
- * Data类定义了一个基础的传感器数据结构
+ * Data类定义了一个基础的传感器数据结构，是一个虚类
  * 构造函数：以一个传感器名称构造（注意此处的ID不是index)
- * 方法：GetTime, GetSensorId, AddToTrajectoryBuilder
+ * 方法：
+ *  GetTime返回时间戳, 
+ *  GetSensorId返回传感器ID, 
+ *  AddToTrajectoryBuilder添加到轨迹构建者
  */
 class Data {
  public:

@@ -19,6 +19,7 @@
 namespace cartographer {
 namespace sensor {
 
+// 根据轨迹号和传感器ID集合，给queue_添加所有的传感器队列
 void Collator::AddTrajectory(
     const int trajectory_id,
     const absl::flat_hash_set<std::string>& expected_sensor_ids,
@@ -33,21 +34,24 @@ void Collator::AddTrajectory(
   }
 }
 
+// 给queue_所有队列都标记为Finished
 void Collator::FinishTrajectory(const int trajectory_id) {
   for (const auto& queue_key : queue_keys_[trajectory_id]) {
     queue_.MarkQueueAsFinished(queue_key);
   }
 }
 
-// 给某个轨迹号添加数据
+// 给某个轨迹号下的某个传感器队列添加数据，注意添加后会自动执行queue_的派发操作
 void Collator::AddSensorData(const int trajectory_id,
                              std::unique_ptr<Data> data) {
   QueueKey queue_key{trajectory_id, data->GetSensorId()};
   queue_.Add(std::move(queue_key), std::move(data));
 }
 
+// 直接调用queue_的Flush:把所有未完成的Queue使用标记成完成并执行派发操作，此举会清理掉所有数据
 void Collator::Flush() { queue_.Flush(); }
 
+// 返回queue_的阻塞派发的轨迹号
 absl::optional<int> Collator::GetBlockingTrajectoryId() const {
   return absl::optional<int>(queue_.GetBlocker().trajectory_id);
 }

@@ -23,6 +23,7 @@
 namespace cartographer {
 namespace mapping {
 
+// 推测这个东西是直接插入到传感器数据队列里面的元素 
 class LocalSlamResultData : public sensor::Data {
  public:
   LocalSlamResultData(const std::string& sensor_id, common::Time time)

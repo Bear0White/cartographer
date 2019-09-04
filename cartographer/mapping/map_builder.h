@@ -34,7 +34,17 @@ proto::MapBuilderOptions CreateMapBuilderOptions(
 
 // Wires up the complete SLAM stack with TrajectoryBuilders (for local submaps)
 // and a PoseGraph for loop closure.
-// 把整个SLAM栈组织在一起，包括了轨迹建立者（局部SLAM）和位姿图（回环优化）
+// 把整个SLAM栈组织在一起，包括了轨迹建立者（用于局部SLAM）和位姿图（用于回环优化）
+/*
+ * 整个carto的最顶层调用接口
+ * 相关的服务，如创建轨迹，结束轨迹，请求子地图等等，都可以在本类中找到对应的处理函数
+ * 构造函数：从参数中构造
+ * 方法：
+ * AddTrajectoryBilder：新建一个轨迹建立者
+ * FinishTrajectory：标记某个轨迹是终止状态
+ * 此外，还有序列化建图状态，从文件加载建图状态，等等。核心方法只有以上两个
+ * 
+ */
 class MapBuilder : public MapBuilderInterface {
  public:
   // 唯一合法的构造函数：从配置参数中构造
